@@ -11,7 +11,7 @@ pub struct Cli {
 pub enum Commands {
     Test {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 'n', long = "test-name")]
         test_name: Option<String>,
         #[arg(short = 'v', long = "verbose")]
@@ -27,7 +27,7 @@ pub enum Commands {
     },
     Class {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 'v', long = "verbose")]
         verbose: bool,
         #[arg(long = "very-verbose")]
@@ -49,13 +49,13 @@ pub enum Commands {
     },
     Exec {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 'e', long = "exec")]
         exec_cmd: String,
     },
     Clone {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
         #[arg(long = "date", help = "Checkout commit before this 'YYYY-MM-DD[ HH:MM:SS]' date")] 
@@ -65,19 +65,19 @@ pub enum Commands {
     },
     Pull {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
     },
     Upload {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(long = "file", help = "Path to class results JSON; defaults to <project>.json")]
         file: Option<String>,
     },
     Rollup {
         #[arg(short = 'p', long = "project")]
-        project: String,
+        project: Option<String>,
         #[arg(short = 'd', long = "by-date", help = "Use dates.toml to aggregate JSONs into a rollup")]
         by_date: bool,
     },

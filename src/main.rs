@@ -36,7 +36,8 @@ fn main() {
                     println!("Config directory: {}", dir.display());
                 }
             }
-            let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project.clone());
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+            let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
             if *quiet { runner.set_quiet(true); }
             let repo = Repo::local(".".into(), runner.project_subdir());
             let res = runner.test_repo(&repo, test_name.as_deref());
@@ -50,37 +51,39 @@ fn main() {
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
             if list.is_empty() { print_red("No students provided and Config.students is empty\n"); std::process::exit(2); }
 
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+
             if *github_action {
                 // Use GitHub API path
-                let gh = match github::Github::new(config.github.clone(), config.git.org.clone(), project.clone(), *verbose) {
+                let gh = match github::Github::new(config.github.clone(), config.git.org.clone(), project_name.clone(), *verbose) {
                     Ok(g) => g,
                     Err(e) => { print_red(&format!("GitHub client init failed: {}\n", e)); std::process::exit(2); }
                 };
                 let mut class_results = vec![];
-                let repos: Vec<Repo> = list.iter().map(|s| Repo::student(project.clone(), s.clone(), None, None)).collect();
+                let repos: Vec<Repo> = list.iter().map(|s| Repo::student(project_name.clone(), s.clone(), None, None)).collect();
                 let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
                 for s in list.iter() {
-                    let r = Repo::student(project.clone(), s.clone(), None, None);
+                    let r = Repo::student(project_name.clone(), s.clone(), None, None);
                     util::print_justified(&r.display_label, longest);
                     let rr = gh.get_action_results(s);
                     println!("{}", rr.score);
                     class_results.push(rr);
                 }
                 // Persist results
-                let runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project.clone());
+                let runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
                 if let Err(e) = runner.write_class_json(&class_results, None) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             } else {
                 // Local test runner path
-                let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project.clone());
+                let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
                 if *quiet { runner.set_quiet(true); }
                 let (suffix_opt, _date_opt) = if *by_date {
-                    let d = match dates::Dates::from_tests_path(&runner.tests_path, project) {
+                    let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
                         Ok(d) => d,
                         Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
                     };
                     match d.select() { Some(sel) => (Some(sel.suffix.clone()), Some(sel.date.clone())), None => (None, None) }
                 } else { (None, None) };
-                let repos: Vec<Repo> = list.into_iter().map(|s| Repo::student(project.clone(), s, runner.project_subdir(), suffix_opt.clone())).collect();
+                let repos: Vec<Repo> = list.into_iter().map(|s| Repo::student(project_name.clone(), s, runner.project_subdir(), suffix_opt.clone())).collect();
                 let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
                 let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs.unwrap_or_else(num_cpus)).build().unwrap();
                 let mut class_results: Vec<testcases::RepoResult> = vec![];
@@ -90,7 +93,7 @@ fn main() {
                         let r = r.clone();
                         let tx = tx.clone();
                         // Clone minimal runner state per thread by creating a new runner
-                        let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project.clone());
+                        let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
                         if *quiet { runner_local.set_quiet(true); }
                         s.spawn(move |_| {
                             util::print_justified(&r.display_label, longest);
@@ -119,9 +122,10 @@ fn main() {
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
             let (suffix_opt, date_opt) = if *by_date {
-                let runner = TestRunner::new(&config.test, false, false, false, project.clone());
-                let d = match dates::Dates::from_tests_path(&runner.tests_path, project) {
+                let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+                let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
                     Ok(d) => d,
                     Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
                 };
@@ -129,11 +133,11 @@ fn main() {
             } else { (None, date.clone()) };
 
             let mut repos = vec![];
-            for s in list { repos.push(testcases::Repo::student(project.clone(), s, None, suffix_opt.clone())); }
+            for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, None, suffix_opt.clone())); }
             let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
             for r in repos.iter() {
                 util::print_justified(&r.display_label, longest);
-                g.clone_repo(project, r, date_opt.as_deref());
+                g.clone_repo(&project_name, r, date_opt.as_deref());
             }
         }
         Commands::Pull { project, students } => {
@@ -143,8 +147,9 @@ fn main() {
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
             let mut repos = vec![];
-            for s in list { repos.push(testcases::Repo::student(project.clone(), s, None, None)); }
+            for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, None, None)); }
             let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
             for r in repos.iter() {
                 util::print_justified(&r.display_label, longest);
@@ -153,15 +158,17 @@ fn main() {
             }
         }
         Commands::Upload { project, file } => {
-            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), project, file.as_deref(), false) {
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), false) {
                 print_red(&format!("{}\n", e));
                 std::process::exit(64);
             }
         }
         Commands::Rollup { project, by_date: _ } => {
-                let runner = TestRunner::new(&config.test, false, false, false, project.clone());
-                let d = match dates::Dates::from_tests_path(&runner.tests_path, project) { Ok(d) => d, Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); } };
-                if let Err(e) = rollup::rollup(project, &d.items) { print_red(&format!("{}\n", e)); std::process::exit(64); }
+                let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+                let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+                let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) { Ok(d) => d, Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); } };
+                if let Err(e) = rollup::rollup(&project_name, &d.items) { print_red(&format!("{}\n", e)); std::process::exit(64); }
         }
     }
 
