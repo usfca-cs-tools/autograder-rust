@@ -32,3 +32,40 @@ fn exec_output_limit() {
     assert!(matches!(res, Err(ExecError::OutputLimit(_))));
 }
 
+#[test]
+fn exec_capture_stderr_combined() {
+    let tmp = tempfile::tempdir().unwrap();
+    let script = tmp.path().join("err.sh");
+    fs::write(&script, "#!/bin/sh\n echo hi 1>&2\n").unwrap();
+    let mut perm = fs::metadata(&script).unwrap().permissions();
+    perm.set_mode(0o755); fs::set_permissions(&script, perm).unwrap();
+
+    let args = vec![script.to_string_lossy().to_string()];
+    let opts = ExecOptions { cwd: None, timeout: std::time::Duration::from_secs(1), capture_stderr: true, output_limit: 220_000 };
+    let out = exec_capture(&args, &opts).unwrap();
+    assert!(out.contains("hi"));
+}
+
+#[cfg(unix)]
+#[test]
+fn exec_kills_process_group_on_timeout() {
+    use std::time::Duration;
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("alive.txt");
+    let script = tmp.path().join("group.sh");
+    // Spawn background writer and sleep
+    let content = format!("#!/bin/sh\n( while :; do echo alive >> \"{}\"; sleep 0.05; done ) &\nsleep 10\n", file.display());
+    fs::write(&script, content).unwrap();
+    let mut perm = fs::metadata(&script).unwrap().permissions();
+    perm.set_mode(0o755); fs::set_permissions(&script, perm).unwrap();
+
+    let args = vec![script.to_string_lossy().to_string()];
+    let opts = ExecOptions { cwd: None, timeout: Duration::from_millis(200), capture_stderr: true, output_limit: 220_000 };
+    let res = exec_capture(&args, &opts);
+    assert!(matches!(res, Err(ExecError::Timeout(_))));
+    // Wait a bit and ensure file stops growing
+    let size1 = fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+    std::thread::sleep(Duration::from_millis(300));
+    let size2 = fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(size1, size2, "background writer should be terminated with pg kill");
+}
