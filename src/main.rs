@@ -31,6 +31,11 @@ fn main() {
     match &cli.command {
         Commands::Test { project, test_name, verbose, very_verbose, unified_diff, quiet, no_color } => {
             util::set_color_enabled(!*no_color && std::env::var("NO_COLOR").is_err());
+            if *verbose {
+                if let Some(dir) = cfg_path.parent() {
+                    println!("Config directory: {}", dir.display());
+                }
+            }
             let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project.clone());
             if *quiet { runner.set_quiet(true); }
             let repo = Repo::local(".".into(), runner.project_subdir());
