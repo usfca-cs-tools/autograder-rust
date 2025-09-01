@@ -154,10 +154,33 @@ fn main() {
                 if let Err(e) = runner.write_class_json(&only_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             }
         }
-        Commands::Exec { project: _, exec_cmd } => {
-            // Placeholder (Phase 2+). For now, inform the user.
-            print_red(&format!("exec not implemented yet: {}\n", exec_cmd));
-            std::process::exit(64);
+        Commands::Exec { project, exec_cmd, students } => {
+            // Build repo list from students (like pull), honoring project subdir
+            let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
+            if list.is_empty() {
+                print_red("No students provided and Config.students is empty\n");
+                std::process::exit(2);
+            }
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+            let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            let mut repos = vec![];
+            for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, runner.project_subdir(), None)); }
+            let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
+            for r in &repos {
+                util::print_justified(&r.display_label, longest);
+                use crate::cmd::{exec_capture, ExecOptions};
+                let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
+                // Execute via shell like Python's shell=True
+                let cmdline = vec![String::from("/bin/sh"), String::from("-c"), exec_cmd.clone()];
+                match exec_capture(&cmdline, &opts) {
+                    Ok(out) => println!("{}", out),
+                    Err(e) => print_red(&format!("{}\n", match e {
+                        crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
+                        crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
+                        crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
+                    })),
+                }
+            }
         }
         Commands::Clone { project, students, verbose, date, by_date } => {
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };

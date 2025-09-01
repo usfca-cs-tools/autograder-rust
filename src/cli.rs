@@ -52,6 +52,8 @@ pub enum Commands {
         project: Option<String>,
         #[arg(short = 'e', long = "exec")]
         exec_cmd: String,
+        #[arg(short = 's', long = "students")]
+        students: Option<Vec<String>>,
     },
     Clone {
         #[arg(short = 'p', long = "project")]
