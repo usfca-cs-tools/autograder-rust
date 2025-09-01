@@ -152,12 +152,15 @@ impl TestRunner {
             match crate::cmd::exec_capture_with_status(&cmdline, &opts) {
                 Ok((out, true)) => Ok(out),
                 Ok((out, false)) => {
-                    // Non-zero exit; detect exec format via common signals
+                    use std::path::Path;
+                    let exe = cmdline.get(0).map(|s| s.as_str()).unwrap_or("");
                     let lower = out.to_lowercase();
-                    if out.trim().is_empty() || lower.contains("exec format error") {
+                    // Heuristic to match Python's Exec format behavior:
+                    // - If the invoked path exists (e.g., ./hello) but fails to execute, treat as ENOEXEC
+                    // - Or if no output, or explicit 'exec format error' seen
+                    if (exe.starts_with("./") && Path::new(exe).exists()) || out.trim().is_empty() || lower.contains("exec format error") {
                         Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8)))
                     } else {
-                        // Return captured output; mismatch will yield score 0 without test_err
                         Ok(out)
                     }
                 }
@@ -255,6 +258,16 @@ impl TestRunner {
                 cur_line.push_str(&label);
                 cur_line.push(' ');
             }
+        }
+        // Collapse any accidental multiple spaces on non-error lines to a single space
+        if !cur_line.is_empty() && !cur_line.contains("    ") {
+            let mut compact = String::new();
+            let mut prev_space = false;
+            for ch in cur_line.chars() {
+                if ch == ' ' { if !prev_space { compact.push(ch); prev_space = true; } }
+                else { compact.push(ch); prev_space = false; }
+            }
+            cur_line = compact;
         }
         let earned = self.make_earned_avail(repo_result);
         if cur_line.is_empty() {
