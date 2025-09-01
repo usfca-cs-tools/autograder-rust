@@ -152,16 +152,9 @@ impl TestRunner {
             match crate::cmd::exec_capture_with_status(&cmdline, &opts) {
                 Ok((out, true, _)) => Ok(out),
                 Ok((out, false, code)) => {
-                    use std::path::Path;
-                    let exe = cmdline.get(0).map(|s| s.as_str()).unwrap_or("");
                     let lower = out.to_lowercase();
-                    let exists_local = exe.starts_with("./") && Path::new(exe).exists();
-                    let enoexec_like = out.trim().is_empty() || lower.contains("exec format error") || matches!(code, Some(126)|Some(193));
-                    if exists_local || enoexec_like {
-                        Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8)))
-                    } else {
-                        Ok(out)
-                    }
+                    let enoexec_like = lower.contains("exec format error") || matches!(code, Some(126)|Some(193));
+                    if enoexec_like { Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8))) } else { Ok(out) }
                 }
                 Err(e) => Err(e),
             }
