@@ -111,17 +111,17 @@ fn main() {
                 // Print one-line summaries in the original repos order
                 for r in &repos {
                     if let Some((_, rr)) = class_results.iter().find(|(rp, _)| rp.display_label == r.display_label) {
-                        // Build Python-like one-line console summary without header
-                        let line = if rr.results.is_empty() {
-                            rr.comment.clone()
-                        } else {
-                            let mut s = String::new();
-                            for t in &rr.results { s.push_str(&crate::util::format_pass_fail(&t.test, t.rubric, t.score)); }
-                            s.push_str(&format!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results)));
-                            s
-                        };
                         util::print_justified(&r.display_label, longest);
-                        println!("{}", line);
+                        if rr.results.is_empty() {
+                            println!("{}", rr.comment);
+                        } else {
+                            // Colorize per-test tokens like Python (green pass, red fail)
+                            for t in &rr.results {
+                                let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                                if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                            }
+                            println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
+                        }
                     } else {
                         util::print_justified(&r.display_label, longest);
                         println!("error: missing result");
