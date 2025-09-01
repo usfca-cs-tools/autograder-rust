@@ -240,20 +240,22 @@ impl TestRunner {
         for r in &repo_result.results {
             let label = format_pass_fail(&r.test, r.rubric, r.score);
             if let Some(e) = &r.test_err {
-                // Flush any accumulated passing labels as a single-spaced line first
+                // If we have accumulated pass labels, keep them on the same line
+                // with the first error label and message.
                 if !pass_concat.is_empty() {
                     out.push_str(&prefix);
                     out.push_str(&pass_concat);
-                    out.push('\n');
                     pass_concat.clear();
                     prefix.clear();
+                } else {
+                    out.push_str(&prefix);
                 }
-                out.push_str(&prefix);
                 // For error lines, trim trailing padding from the label to match Python
                 out.push_str(label.trim_end());
                 out.push_str("    ");
                 out.push_str(e);
-                if !out.ends_with('\n') { out.push('\n'); }
+                out.push('\n');
+                // After the first error, subsequent errors each go on their own line
                 prefix.clear();
             } else {
                 pass_concat.push_str(&label);
