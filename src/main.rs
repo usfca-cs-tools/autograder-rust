@@ -46,7 +46,7 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Commands::Class { project, verbose, very_verbose, unified_diff, github_action, students, by_date, jobs, quiet, no_color } => {
+        Commands::Class { project, verbose, very_verbose, unified_diff, github_action, students, by_date, jobs, quiet: _, no_color } => {
             util::set_color_enabled(!*no_color && std::env::var("NO_COLOR").is_err());
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
             if list.is_empty() { print_red("No students provided and Config.students is empty\n"); std::process::exit(2); }

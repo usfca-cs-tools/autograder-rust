@@ -291,7 +291,7 @@ impl TestRunner {
             return Ok(RepoResult { comment: msg, results: vec![], score: 0, student: repo.student.clone(), build_err: None });
         }
 
-        let mut build_err = self.build(repo);
+        let build_err = self.build(repo);
         let mut results = vec![];
         let iter = self.testcases.iter().filter(|tc| only_name.map(|n| n == tc.name).unwrap_or(true));
         for tc in iter { results.push(self.run_one_test(repo, tc)); }

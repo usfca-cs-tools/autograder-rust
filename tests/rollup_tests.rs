@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
 
 use autograder_rust::rollup::rollup;
 use autograder_rust::dates::DateItem;
@@ -41,4 +40,3 @@ fn rollup_math_applies_improvements_only() {
     assert!(out.contains("6.5"));
     assert!(out.contains("7.0"));
 }
-

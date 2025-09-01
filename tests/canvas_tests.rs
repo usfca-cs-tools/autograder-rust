@@ -60,7 +60,7 @@ fn canvas_upload_mock() {
 
     let canvas = CanvasCfg { host_name: host, access_token: String::from("tok"), course_name: String::from("Course X") };
     let mapper = CanvasMapperCfg { map_path: csv_path.to_string_lossy().to_string(), github_col_name: String::from("GitHub"), login_col_name: String::from("SIS Login ID") };
-    upload_class(canvas, mapper, project, Some(json_path.to_str().unwrap()), false).unwrap();
+    upload_class(canvas, mapper, project, Some(json_path.to_str().unwrap()), false, false).unwrap();
 
     courses.assert();
     assignments.assert();
@@ -98,7 +98,7 @@ fn canvas_pagination_and_error() {
     });
 
     let canvas = CanvasCfg { host_name: host, access_token: String::from("tok"), course_name: String::from("Course X") };
-    let mapper = CanvasMapperCfg { map_path: String::from("/nonexistent.csv"), github_col_name: String::from("GitHub"), login_col_name: String::from("SIS Login ID") };
+    let _mapper = CanvasMapperCfg { map_path: String::from("/nonexistent.csv"), github_col_name: String::from("GitHub"), login_col_name: String::from("SIS Login ID") };
 
     // Call get_course_id through upload_class minimal path: expect failure due to missing CSV
     // but ensure pagination was hit

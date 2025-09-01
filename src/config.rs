@@ -55,24 +55,19 @@ fn default_login_col() -> String { String::from("SIS Login ID") }
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Config {
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub Test: Option<TestCfg>,
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub Config: Option<ConfigCfg>,
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub Git: Option<GitCfg>,
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub Github: Option<GithubCfg>,
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub Canvas: Option<CanvasCfg>,
-    #[allow(non_snake_case)]
-    #[serde(default)]
-    pub CanvasMapper: Option<CanvasMapperCfg>,
+    // Raw sections as they appear in TOML, mapped via serde rename
+    #[serde(rename = "Test", default)]
+    pub test_section: Option<TestCfg>,
+    #[serde(rename = "Config", default)]
+    pub config_section: Option<ConfigCfg>,
+    #[serde(rename = "Git", default)]
+    pub git_section: Option<GitCfg>,
+    #[serde(rename = "Github", default)]
+    pub github_section: Option<GithubCfg>,
+    #[serde(rename = "Canvas", default)]
+    pub canvas_section: Option<CanvasCfg>,
+    #[serde(rename = "CanvasMapper", default)]
+    pub canvas_mapper_section: Option<CanvasMapperCfg>,
 
     // Flattened public view for convenience
     #[serde(skip)]
@@ -98,12 +93,12 @@ impl Config {
         }
         let content = fs::read_to_string(path)?;
         let mut raw: Config = toml::from_str(&content).unwrap_or_default();
-        raw.test = raw.Test.clone().unwrap_or_default();
-        raw.config = raw.Config.clone().unwrap_or_default();
-        raw.git = raw.Git.clone().unwrap_or_default();
-        raw.github = raw.Github.clone().unwrap_or_default();
-        raw.canvas = raw.Canvas.clone().unwrap_or_default();
-        raw.canvas_mapper = raw.CanvasMapper.clone().unwrap_or_default();
+        raw.test = raw.test_section.clone().unwrap_or_default();
+        raw.config = raw.config_section.clone().unwrap_or_default();
+        raw.git = raw.git_section.clone().unwrap_or_default();
+        raw.github = raw.github_section.clone().unwrap_or_default();
+        raw.canvas = raw.canvas_section.clone().unwrap_or_default();
+        raw.canvas_mapper = raw.canvas_mapper_section.clone().unwrap_or_default();
         Ok(raw)
     }
 

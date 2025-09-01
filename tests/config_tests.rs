@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
 
 use autograder_rust::config::resolve_config_path;
 use serial_test::serial;
