@@ -78,6 +78,13 @@ impl Git {
         Ok(hash)
     }
 
+    pub fn get_short_hash(local: &PathBuf) -> Option<String> {
+        if !local.is_dir() { return None; }
+        let s = Self::run_capture(&["git", "rev-parse", "--short", "HEAD"], Some(local)).ok()?;
+        let h = s.lines().next().unwrap_or("").trim().to_string();
+        if h.is_empty() { None } else { Some(h) }
+    }
+
     pub fn clone_repo(&self, project: &str, repo: &Repo, date: Option<&str>, verbose: bool) {
         // repo.local_path is ./project-student
         if repo.local_path.is_dir() {
