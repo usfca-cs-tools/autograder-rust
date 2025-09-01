@@ -4,6 +4,7 @@ use std::fs;
 
 use crate::config::{CanvasCfg, CanvasMapperCfg};
 use crate::util::{expand_tilde, print_green, print_red, print_yellow};
+use std::io::{Read, Write};
 
 pub struct CanvasMapper {
     map: HashMap<String, String>, // github -> login_id
@@ -147,8 +148,32 @@ struct ClassResultItem {
     comment: String,
 }
 
-pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &str, file: Option<&str>, verbose: bool) -> anyhow::Result<()> {
-    let json_path = file.map(|s| s.to_string()).unwrap_or_else(|| format!("{}.json", project));
+pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &str, file: Option<&str>, verbose: bool, by_date: bool) -> anyhow::Result<()> {
+    let json_path = if by_date && file.is_none() {
+        // Present arrow-key menu of *.json in cwd; abort on cancel
+        let mut files: Vec<String> = fs::read_dir(".")?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .filter_map(|e| {
+                let p = e.path();
+                if p.extension().and_then(|s| s.to_str()) == Some("json") {
+                    Some(p.file_name().unwrap().to_string_lossy().to_string())
+                } else { None }
+            })
+            .collect();
+        files.sort();
+        if files.is_empty() { print_yellow("No JSON files found\n"); return Ok(()); }
+        match arrow_select_strings(&files) {
+            ArrowOutcome::Pick(i) => files[i].clone(),
+            ArrowOutcome::Aborted => return Ok(()),
+            ArrowOutcome::Unsupported => {
+                // Fallback to first as a simple default
+                files[0].clone()
+            }
+        }
+    } else {
+        file.map(|s| s.to_string()).unwrap_or_else(|| format!("{}.json", project))
+    };
     let data = fs::read_to_string(&json_path).map_err(|e| anyhow::anyhow!("{} does not exist. Run \"grade-rs class -p {}\" first ({})", json_path, project, e))?;
     let items: Vec<ClassResultItem> = serde_json::from_str(&data)?;
     if verbose { println!("Uploading from {} ({} results)", json_path, items.len()); }
@@ -182,4 +207,57 @@ pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &st
     }
 
     Ok(())
+}
+
+enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
+
+#[cfg(unix)]
+fn is_tty() -> bool { unsafe { libc::isatty(0) == 1 } }
+#[cfg(not(unix))]
+fn is_tty() -> bool { false }
+
+fn arrow_select_strings(items: &[String]) -> ArrowOutcome {
+    if !is_tty() { return ArrowOutcome::Unsupported; }
+    #[cfg(unix)]
+    unsafe {
+        let mut old = std::mem::zeroed();
+        if libc::tcgetattr(0, &mut old) != 0 { return ArrowOutcome::Unsupported; }
+        let mut raw = old.clone();
+        raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
+        raw.c_cc[libc::VMIN] = 1; raw.c_cc[libc::VTIME] = 0;
+        if libc::tcsetattr(0, libc::TCSANOW, &raw) != 0 { return ArrowOutcome::Unsupported; }
+        struct Restore(libc::termios);
+        impl Drop for Restore { fn drop(&mut self) { unsafe { let _ = libc::tcsetattr(0, libc::TCSANOW, &self.0); } let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25h\n"); let _ = std::io::stdout().flush(); } }
+        let _guard = Restore(old);
+        // Hide cursor
+        let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25l"); let _ = std::io::stdout().flush();
+
+        fn draw(items: &[String], sel: isize) {
+            println!("Select JSON (use ↑/↓, Enter):");
+            for (i, s) in items.iter().enumerate() {
+                if i as isize == sel { println!("\x1b[7m> {}\x1b[27m", s); } else { println!("  {}", s); }
+            }
+            let _ = std::io::stdout().flush();
+        }
+        let mut sel: isize = 0;
+        draw(items, sel);
+        let mut buf = [0u8;3];
+        loop {
+            if std::io::stdin().read(&mut buf).ok().unwrap_or(0) == 0 { return ArrowOutcome::Aborted; }
+            match buf {
+                [b'\r', ..] | [b'\n', ..] => { println!(""); return ArrowOutcome::Pick(sel as usize); }
+                [0x1b, b'[', b'A'] => { if sel > 0 { sel -= 1; } }
+                [0x1b, b'[', b'B'] => { if sel < (items.len() as isize - 1) { sel += 1; } }
+                [0x03, ..] | [b'q', ..] => { print_yellow("No selection made\n"); return ArrowOutcome::Aborted; }
+                _ => {}
+            }
+            let up = items.len() + 1; // prompt + items
+            print!("\x1b[{}A", up);
+            for _ in 0..up { print!("\x1b[2K\r\n"); }
+            print!("\x1b[{}A", up);
+            draw(items, sel);
+        }
+    }
+    #[allow(unreachable_code)]
+    ArrowOutcome::Unsupported
 }

@@ -296,9 +296,9 @@ fn main() {
                 println!();
             }
         }
-        Commands::Upload { project, file, verbose } => {
+        Commands::Upload { project, file, verbose, by_date } => {
             let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
-            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), *verbose) {
+            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), *verbose, *by_date) {
                 print_red(&format!("{}\n", e));
                 std::process::exit(64);
             }

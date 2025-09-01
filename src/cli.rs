@@ -84,6 +84,8 @@ pub enum Commands {
         file: Option<String>,
         #[arg(short = 'v', long = "verbose")]
         verbose: bool,
+        #[arg(short = 'd', long = "by-date", help = "Select JSON from current dir (arrow keys)")]
+        by_date: bool,
     },
     Rollup {
         #[arg(short = 'p', long = "project")]
