@@ -154,7 +154,7 @@ fn main() {
                 if let Err(e) = runner.write_class_json(&only_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             }
         }
-        Commands::Exec { project, exec_cmd, students, jobs } => {
+        Commands::Exec { project, exec_cmd, students, jobs, by_date } => {
             // Build repo list from students (like pull), honoring project subdir
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
             if list.is_empty() {
@@ -163,8 +163,15 @@ fn main() {
             }
             let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
             let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            let suffix_opt: Option<String> = if *by_date {
+                let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
+                    Ok(d) => d,
+                    Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
+                };
+                d.select().map(|sel| sel.suffix.clone())
+            } else { None };
             let mut repos = vec![];
-            for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, runner.project_subdir(), None)); }
+            for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, runner.project_subdir(), suffix_opt.clone())); }
             let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
 
             // Parallel execution with ordered, incremental printing

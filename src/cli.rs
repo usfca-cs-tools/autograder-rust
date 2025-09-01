@@ -56,6 +56,8 @@ pub enum Commands {
         students: Option<Vec<String>>,
         #[arg(short = 'j', long = "jobs", help = "Number of parallel jobs (default: CPUs)")]
         jobs: Option<usize>,
+        #[arg(short = 'd', long = "by-date", help = "Select a date from dates.toml for suffix context")]
+        by_date: bool,
     },
     Clone {
         #[arg(short = 'p', long = "project")]
