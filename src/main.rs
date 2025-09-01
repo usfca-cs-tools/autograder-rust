@@ -110,27 +110,40 @@ fn main() {
                 });
                 // Print one-line summaries in the original repos order
                 for r in &repos {
-                    if let Some((_, rr)) = class_results.iter_mut().find(|(rp, _)| rp.display_label == r.display_label) {
-                        // Prepend commit URL header if repo exists and hash is available
-                        let mut header = String::new();
-                        if r.local_path.is_dir() {
-                            if let Some(h) = git::Git::get_short_hash(&r.local_path) {
-                                if let Some(stu) = &r.student {
-                                    let url = format!("https://github.com/{}/{}-{}/tree/{}", config.git.org, project_name, stu, h);
-                                    header = format!("Test results for repo as of this commit: {}\n\n", url);
-                                }
-                            }
-                        }
-                        if !header.is_empty() { rr.comment = format!("{}{}", header, rr.comment); }
+                    if let Some((_, rr)) = class_results.iter().find(|(rp, _)| rp.display_label == r.display_label) {
+                        // Build Python-like one-line console summary without header
+                        let line = if rr.results.is_empty() {
+                            rr.comment.clone()
+                        } else {
+                            let mut s = String::new();
+                            for t in &rr.results { s.push_str(&crate::util::format_pass_fail(&t.test, t.rubric, t.score)); }
+                            s.push_str(&format!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results)));
+                            s
+                        };
                         util::print_justified(&r.display_label, longest);
-                        println!("{}", rr.comment);
+                        println!("{}", line);
                     } else {
                         util::print_justified(&r.display_label, longest);
                         println!("error: missing result");
                     }
                 }
                 // Persist histogram and JSON
-                let only_results: Vec<testcases::RepoResult> = class_results.into_iter().map(|(_, rr)| rr).collect();
+                let mut only_results: Vec<testcases::RepoResult> = class_results.into_iter().map(|(_, rr)| rr).collect();
+                // Prepend commit header to comments for JSON persistence
+                for rr in &mut only_results {
+                    if let Some(stu) = &rr.student {
+                        let repo_dir = std::path::PathBuf::from(format!("./{}-{}{}", project_name, stu, suffix_opt.as_deref().map(|s| format!("-{}", s)).unwrap_or_default()));
+                        if repo_dir.is_dir() {
+                            if let Some(h) = git::Git::get_short_hash(&repo_dir) {
+                                let url = format!("https://github.com/{}/{}-{}/tree/{}", config.git.org, project_name, stu, h);
+                                let header = format!("Test results for repo as of this commit: {}\n\n", url);
+                                if !rr.comment.starts_with("Test results for repo as of this commit:") {
+                                    rr.comment = format!("{}{}", header, rr.comment.clone());
+                                }
+                            }
+                        }
+                    }
+                }
                 runner.print_histogram(&only_results);
                 if let Err(e) = runner.write_class_json(&only_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             }

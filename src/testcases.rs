@@ -277,11 +277,17 @@ impl TestRunner {
         format!("{}/{}", repo_result.score, self.total_rubric())
     }
 
+    pub fn make_earned_avail_static(results: &[TcResult]) -> String {
+        let avail: i64 = results.iter().map(|t| t.rubric).sum();
+        let earned: i64 = results.iter().map(|t| t.score).sum();
+        format!("{}/{}", earned, avail)
+    }
+
     pub fn test_repo(&mut self, repo: &Repo, only_name: Option<&str>) -> anyhow::Result<RepoResult> {
         self.load_testcases()?;
         if !repo.local_path.is_dir() {
             let msg = format!("Local repo {} does not exist", repo.local_path.display());
-            print_red(&format!("{}\n", msg));
+            if !self.quiet { print_red(&format!("{}\n", msg)); }
             return Ok(RepoResult { comment: msg, results: vec![], score: 0, student: repo.student.clone(), build_err: None });
         }
 
@@ -299,7 +305,12 @@ impl TestRunner {
     pub fn total_rubric(&self) -> i64 { self.testcases.iter().map(|tc| tc.rubric).sum() }
 
     pub fn print_histogram(&self, class_results: &[RepoResult]) {
-        let avail = self.total_rubric();
+        // Derive available points from any non-empty result set
+        let mut avail = 0;
+        for r in class_results {
+            let s: i64 = r.results.iter().map(|t| t.rubric).sum();
+            if s > 0 { avail = s; break; }
+        }
         let mut freqs: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
         for r in class_results { *freqs.entry(r.score).or_default() += 1; }
         println!("\nScore frequency (n = {})", class_results.len());
