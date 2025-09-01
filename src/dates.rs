@@ -68,7 +68,8 @@ fn set_raw_mode(enable: bool, old: &mut libc::termios) -> std::io::Result<()> {
             if libc::tcgetattr(0, t.as_mut_ptr()) != 0 { return Err(std::io::Error::last_os_error()); }
             *old = t.assume_init();
             let mut raw = old.clone();
-            raw.c_lflag &= !(libc::ICANON | libc::ECHO);
+            // Disable canonical mode, echo, and signals (so Ctrl-C is just a byte 0x03)
+            raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
             raw.c_cc[libc::VMIN] = 1;
             raw.c_cc[libc::VTIME] = 0;
             if libc::tcsetattr(0, libc::TCSANOW, &raw) != 0 { return Err(std::io::Error::last_os_error()); }
@@ -118,6 +119,10 @@ fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
                 [b'\r', ..] | [b'\n', ..] => { println!(""); return ArrowOutcome::Pick(sel as usize); }
                 [0x1b, b'[', b'A'] => { if sel > 0 { sel -= 1; } }
                 [0x1b, b'[', b'B'] => { if sel < (items.len() as isize - 1) { sel += 1; } }
+                [0x03, ..] => { // Ctrl-C in raw mode
+                    print_yellow("No selection made\n");
+                    return ArrowOutcome::Aborted;
+                }
                 [b'q', ..] => { print_yellow("No selection made\n"); return ArrowOutcome::Aborted; }
                 _ => {}
             }
