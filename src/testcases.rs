@@ -132,8 +132,8 @@ impl TestRunner {
                 let cmd = vec!["make".to_string(), "-C".to_string(), repo.local_path.to_string_lossy().to_string()];
                 let opts = ExecOptions { cwd: None, timeout: Duration::from_secs(30), capture_stderr: true, output_limit: 220_000 };
                 match crate::cmd::exec_capture_with_status(&cmd, &opts) {
-                    Ok((_out, true)) => None,
-                    Ok((_out, false)) => Some("Program did not make successfully".into()),
+                    Ok((_out, true, _)) => None,
+                    Ok((_out, false, _)) => Some("Program did not make successfully".into()),
                     Err(_) => Some("Program did not make successfully".into()),
                 }
             }
@@ -150,15 +150,14 @@ impl TestRunner {
         for i in tc.input.iter() { cmdline.push(self.interpolate(i, &tc.name)); }
         let actual_res = if tc.output == "stdout" {
             match crate::cmd::exec_capture_with_status(&cmdline, &opts) {
-                Ok((out, true)) => Ok(out),
-                Ok((out, false)) => {
+                Ok((out, true, _)) => Ok(out),
+                Ok((out, false, code)) => {
                     use std::path::Path;
                     let exe = cmdline.get(0).map(|s| s.as_str()).unwrap_or("");
                     let lower = out.to_lowercase();
-                    // Heuristic to match Python's Exec format behavior:
-                    // - If the invoked path exists (e.g., ./hello) but fails to execute, treat as ENOEXEC
-                    // - Or if no output, or explicit 'exec format error' seen
-                    if (exe.starts_with("./") && Path::new(exe).exists()) || out.trim().is_empty() || lower.contains("exec format error") {
+                    let exists_local = exe.starts_with("./") && Path::new(exe).exists();
+                    let enoexec_like = out.trim().is_empty() || lower.contains("exec format error") || matches!(code, Some(126)|Some(193));
+                    if exists_local || enoexec_like {
                         Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8)))
                     } else {
                         Ok(out)
@@ -242,39 +241,39 @@ impl TestRunner {
     fn make_comment(&self, repo_result: &RepoResult) -> String {
         // Match Python formatting of comment body
         let mut out = String::new();
-        let mut cur_line = String::new();
-        if let Some(be) = &repo_result.build_err { cur_line.push_str(be); cur_line.push(' '); }
+        let mut pass_labels: Vec<String> = Vec::new();
+        let mut prefix = String::new();
+        if let Some(be) = &repo_result.build_err { prefix.push_str(be); prefix.push(' '); }
         for r in &repo_result.results {
-            // Compact label without padding
             let label = format!("{}({}/{})", r.test, r.score, r.rubric);
             if let Some(e) = &r.test_err {
-                cur_line.push_str(&label);
-                cur_line.push_str("    ");
-                cur_line.push_str(e);
-                if !cur_line.ends_with('\n') { cur_line.push('\n'); }
-                out.push_str(&cur_line);
-                cur_line.clear();
+                // Flush any accumulated passing labels as a single-spaced line first
+                if !pass_labels.is_empty() {
+                    out.push_str(&prefix);
+                    out.push_str(&pass_labels.join(" "));
+                    out.push('\n');
+                    pass_labels.clear();
+                    prefix.clear();
+                }
+                out.push_str(&prefix);
+                out.push_str(&label);
+                out.push_str("    ");
+                out.push_str(e);
+                if !out.ends_with('\n') { out.push('\n'); }
+                prefix.clear();
             } else {
-                cur_line.push_str(&label);
-                cur_line.push(' ');
+                pass_labels.push(label);
             }
-        }
-        // Collapse any accidental multiple spaces on non-error lines to a single space
-        if !cur_line.is_empty() && !cur_line.contains("    ") {
-            let mut compact = String::new();
-            let mut prev_space = false;
-            for ch in cur_line.chars() {
-                if ch == ' ' { if !prev_space { compact.push(ch); prev_space = true; } }
-                else { compact.push(ch); prev_space = false; }
-            }
-            cur_line = compact;
         }
         let earned = self.make_earned_avail(repo_result);
-        if cur_line.is_empty() {
+        if !pass_labels.is_empty() {
+            out.push_str(&prefix);
+            out.push_str(&pass_labels.join(" "));
+            out.push(' ');
             out.push_str(&earned);
         } else {
-            cur_line.push_str(&earned);
-            out.push_str(&cur_line);
+            if out.is_empty() { out.push_str(&prefix); }
+            out.push_str(&earned);
         }
         out
     }

@@ -183,8 +183,8 @@ pub fn exec_capture(cmdline: &[String], opts: &ExecOptions) -> Result<String, Ex
 }
 
 // Like exec_capture, but returns whether the process exited successfully.
-pub fn exec_capture_with_status(cmdline: &[String], opts: &ExecOptions) -> Result<(String, bool), ExecError> {
-    if cmdline.is_empty() { return Ok((String::new(), true)); }
+pub fn exec_capture_with_status(cmdline: &[String], opts: &ExecOptions) -> Result<(String, bool, Option<i32>), ExecError> {
+    if cmdline.is_empty() { return Ok((String::new(), true, Some(0))); }
     let mut c = Command::new(&cmdline[0]);
     if cmdline.len() > 1 { c.args(&cmdline[1..]); }
     if let Some(cwd) = &opts.cwd { c.current_dir(cwd); }
@@ -293,5 +293,6 @@ pub fn exec_capture_with_status(cmdline: &[String], opts: &ExecOptions) -> Resul
     let out = out_buf.lock().unwrap();
     // Obtain the final exit status
     let success = child.wait().map(|s| s.success()).unwrap_or(false);
-    Ok((String::from_utf8_lossy(&out).to_string(), success))
+    let code = child.wait().ok().and_then(|s| s.code());
+    Ok((String::from_utf8_lossy(&out).to_string(), success, code))
 }
