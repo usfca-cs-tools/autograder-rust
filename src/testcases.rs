@@ -152,12 +152,12 @@ impl TestRunner {
             match crate::cmd::exec_capture_with_status(&cmdline, &opts) {
                 Ok((out, true)) => Ok(out),
                 Ok((out, false)) => {
-                    // Non-zero exit; if likely exec format (no output), surface Python-like error
-                    let exe = cmdline.get(0).cloned().unwrap_or_else(|| "./program".into());
-                    if out.trim().is_empty() {
+                    // Non-zero exit; detect exec format via common signals
+                    let lower = out.to_lowercase();
+                    if out.trim().is_empty() || lower.contains("exec format error") {
                         Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8)))
                     } else {
-                        // Treat as mismatch by returning output; score stays 0
+                        // Return captured output; mismatch will yield score 0 without test_err
                         Ok(out)
                     }
                 }
@@ -242,7 +242,8 @@ impl TestRunner {
         let mut cur_line = String::new();
         if let Some(be) = &repo_result.build_err { cur_line.push_str(be); cur_line.push(' '); }
         for r in &repo_result.results {
-            let label = format_pass_fail(&r.test, r.rubric, r.score);
+            // Compact label without padding
+            let label = format!("{}({}/{})", r.test, r.score, r.rubric);
             if let Some(e) = &r.test_err {
                 cur_line.push_str(&label);
                 cur_line.push_str("    ");
@@ -251,8 +252,8 @@ impl TestRunner {
                 out.push_str(&cur_line);
                 cur_line.clear();
             } else {
-                // Label already includes trailing space; do not add extra space
                 cur_line.push_str(&label);
+                cur_line.push(' ');
             }
         }
         let earned = self.make_earned_avail(repo_result);
