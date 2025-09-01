@@ -75,7 +75,8 @@ fn main() {
             } else {
                 // Local test runner path
                 let mut runner = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
-                if *quiet { runner.set_quiet(true); }
+                // Suppress internal per-test and trailing prints; we'll print summaries ourselves
+                runner.set_quiet(true);
                 let (suffix_opt, _date_opt) = if *by_date {
                     let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
                         Ok(d) => d,
@@ -85,8 +86,10 @@ fn main() {
                 } else { (None, None) };
                 let repos: Vec<Repo> = list.into_iter().map(|s| Repo::student(project_name.clone(), s, runner.project_subdir(), suffix_opt.clone())).collect();
                 let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
-                let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs.unwrap_or_else(num_cpus)).build().unwrap();
-                let mut class_results: Vec<testcases::RepoResult> = vec![];
+                // Avoid interleaved stdout noise when verbose; run single-threaded then
+                let threads = if *verbose || *very_verbose { 1 } else { jobs.unwrap_or_else(num_cpus) };
+                let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+                let mut class_results: Vec<(Repo, testcases::RepoResult)> = vec![];
                 pool.scope(|s| {
                     let (tx, rx) = crossbeam_channel::unbounded();
                     for r in &repos {
@@ -94,20 +97,42 @@ fn main() {
                         let tx = tx.clone();
                         // Clone minimal runner state per thread by creating a new runner
                         let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
-                        if *quiet { runner_local.set_quiet(true); }
+                        runner_local.set_quiet(true);
                         s.spawn(move |_| {
-                            util::print_justified(&r.display_label, longest);
-                            let res = runner_local.test_repo(&r, None);
+                            let res = runner_local.test_repo(&r, None).map(|rr| (r, rr));
                             let _ = tx.send(res);
                         });
                     }
                     drop(tx);
                     for res in rx.iter() {
-                        match res { Ok(rr) => class_results.push(rr), Err(e) => print_red(&format!("{}\n", e)) }
+                        match res { Ok(pair) => class_results.push(pair), Err(e) => print_red(&format!("{}\n", e)) }
                     }
                 });
-                runner.print_histogram(&class_results);
-                if let Err(e) = runner.write_class_json(&class_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
+                // Print one-line summaries in the original repos order
+                for r in &repos {
+                    if let Some((_, rr)) = class_results.iter_mut().find(|(rp, _)| rp.display_label == r.display_label) {
+                        // Prepend commit URL header if repo exists and hash is available
+                        let mut header = String::new();
+                        if r.local_path.is_dir() {
+                            if let Some(h) = git::Git::get_short_hash(&r.local_path) {
+                                if let Some(stu) = &r.student {
+                                    let url = format!("https://github.com/{}/{}-{}/tree/{}", config.git.org, project_name, stu, h);
+                                    header = format!("Test results for repo as of this commit: {}\n\n", url);
+                                }
+                            }
+                        }
+                        if !header.is_empty() { rr.comment = format!("{}{}", header, rr.comment); }
+                        util::print_justified(&r.display_label, longest);
+                        println!("{}", rr.comment);
+                    } else {
+                        util::print_justified(&r.display_label, longest);
+                        println!("error: missing result");
+                    }
+                }
+                // Persist histogram and JSON
+                let only_results: Vec<testcases::RepoResult> = class_results.into_iter().map(|(_, rr)| rr).collect();
+                runner.print_histogram(&only_results);
+                if let Err(e) = runner.write_class_json(&only_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             }
         }
         Commands::Exec { project: _, exec_cmd } => {
@@ -157,9 +182,9 @@ fn main() {
                 println!();
             }
         }
-        Commands::Upload { project, file } => {
+        Commands::Upload { project, file, verbose } => {
             let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
-            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), false) {
+            if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), *verbose) {
                 print_red(&format!("{}\n", e));
                 std::process::exit(64);
             }

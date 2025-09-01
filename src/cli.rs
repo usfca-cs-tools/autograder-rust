@@ -76,6 +76,8 @@ pub enum Commands {
         project: Option<String>,
         #[arg(long = "file", help = "Path to class results JSON; defaults to <project>.json")]
         file: Option<String>,
+        #[arg(short = 'v', long = "verbose")]
+        verbose: bool,
     },
     Rollup {
         #[arg(short = 'p', long = "project")]

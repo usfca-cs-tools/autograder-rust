@@ -151,11 +151,13 @@ pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &st
     let json_path = file.map(|s| s.to_string()).unwrap_or_else(|| format!("{}.json", project));
     let data = fs::read_to_string(&json_path).map_err(|e| anyhow::anyhow!("{} does not exist. Run \"grade-rs class -p {}\" first ({})", json_path, project, e))?;
     let items: Vec<ClassResultItem> = serde_json::from_str(&data)?;
+    if verbose { println!("Uploading from {} ({} results)", json_path, items.len()); }
 
     let mapper = CanvasMapper::from_cfg(&mapper_cfg)?;
     let client = CanvasClient::new(canvas, verbose)?;
     let course_id = client.get_course_id()?;
     let assignment_id = client.get_assignment_id(course_id, project)?;
+    if verbose { println!("Course ID: {}, Assignment ID: {}", course_id, assignment_id); }
     let enrollment = client.get_enrollment(course_id)?;
 
     // Map login_id -> user_id
@@ -166,10 +168,12 @@ pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &st
         let Some(student) = it.student else { continue };
         let Some(login_id) = mapper.lookup(&student) else { print_red(&format!("no mapping for {}\n", student)); continue; };
         let Some(user_id) = id_map.get(&login_id).copied() else { print_red(&format!("{} not enrolled\n", login_id)); continue; };
+        if verbose { println!("Map: {} -> {} (user_id {})", student, login_id, user_id); }
         print!("Uploading {} {} ", login_id, it.score);
         // Skip if same as Canvas
         if let Ok(Some(cur)) = client.get_submission_score(course_id, assignment_id, user_id) {
             if (cur - (it.score as f64)).abs() < f64::EPSILON { println!("skipping: new score == score in Canvas"); continue; }
+            if verbose { println!("(current Canvas score: {})", cur); }
         }
         match client.put_submission(course_id, assignment_id, user_id, it.score, &it.comment) {
             Ok(true) => print_green("ok\n"),
