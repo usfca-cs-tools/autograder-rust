@@ -181,3 +181,117 @@ pub fn exec_capture(cmdline: &[String], opts: &ExecOptions) -> Result<String, Ex
     let out = out_buf.lock().unwrap();
     Ok(String::from_utf8_lossy(&out).to_string())
 }
+
+// Like exec_capture, but returns whether the process exited successfully.
+pub fn exec_capture_with_status(cmdline: &[String], opts: &ExecOptions) -> Result<(String, bool), ExecError> {
+    if cmdline.is_empty() { return Ok((String::new(), true)); }
+    let mut c = Command::new(&cmdline[0]);
+    if cmdline.len() > 1 { c.args(&cmdline[1..]); }
+    if let Some(cwd) = &opts.cwd { c.current_dir(cwd); }
+    c.stdout(Stdio::piped());
+    if opts.capture_stderr { c.stderr(Stdio::piped()); } else { c.stderr(Stdio::null()); }
+
+    #[cfg(unix)]
+    {
+        unsafe { c.pre_exec(|| { libc::setsid(); Ok(()) }); }
+    }
+    let mut child = c.spawn()?;
+    let start = Instant::now();
+    let timeout = opts.timeout;
+
+    let total = Arc::new(AtomicUsize::new(0));
+    let out_buf = Arc::new(Mutex::new(Vec::<u8>::new()));
+
+    let total_clone = total.clone();
+    let out_clone = out_buf.clone();
+    let mut stdout = child.stdout.take();
+    let reader = thread::spawn(move || {
+        if let Some(mut s) = stdout.take() {
+            let mut buf = [0u8; 8192];
+            loop {
+                match s.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        total_clone.fetch_add(n, Ordering::Relaxed);
+                        if let Ok(mut o) = out_clone.lock() { o.extend_from_slice(&buf[..n]); }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(_) => break,
+                }
+            }
+        }
+    });
+    let err_handle = if opts.capture_stderr {
+        let total_clone = total.clone();
+        let out_clone = out_buf.clone();
+        let mut stderr = child.stderr.take();
+        Some(thread::spawn(move || {
+            if let Some(mut s) = stderr.take() {
+                let mut buf = [0u8; 8192];
+                loop {
+                    match s.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            total_clone.fetch_add(n, Ordering::Relaxed);
+                            if let Ok(mut o) = out_clone.lock() { o.extend_from_slice(&buf[..n]); }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                        Err(_) => break,
+                    }
+                }
+            }
+        }))
+    } else { None };
+
+    #[cfg(unix)]
+    let pgid: Option<pid_t> = unsafe {
+        let res = libc::getpgid(child.id() as pid_t);
+        if res == -1 { None } else { Some(res) }
+    };
+    #[cfg(unix)]
+    if let Some(pg) = pgid { track_pgid(pg); }
+
+    loop {
+        if let Some(_status) = child.try_wait().unwrap_or(None) { break; }
+        if start.elapsed() > timeout {
+            #[cfg(unix)]
+            if let Some(pg) = pgid {
+                unsafe { libc::kill(-pg, libc::SIGTERM); }
+                thread::sleep(Duration::from_millis(200));
+                if child.try_wait().ok().flatten().is_none() {
+                    crate::util::print_yellow("Escalating to SIGKILL\n");
+                    unsafe { libc::kill(-pg, libc::SIGKILL); }
+                }
+            }
+            let _ = child.kill();
+            let _ = reader.join();
+            if let Some(h) = err_handle { let _ = h.join(); }
+            return Err(ExecError::Timeout(timeout));
+        }
+        if total.load(Ordering::Relaxed) > opts.output_limit {
+            #[cfg(unix)]
+            if let Some(pg) = pgid {
+                unsafe { libc::kill(-pg, libc::SIGTERM); }
+                thread::sleep(Duration::from_millis(200));
+                if child.try_wait().ok().flatten().is_none() {
+                    crate::util::print_yellow("Escalating to SIGKILL\n");
+                    unsafe { libc::kill(-pg, libc::SIGKILL); }
+                }
+            }
+            let _ = child.kill();
+            let _ = reader.join();
+            if let Some(h) = err_handle { let _ = h.join(); }
+            return Err(ExecError::OutputLimit(total.load(Ordering::Relaxed)));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    let _ = reader.join();
+    if let Some(h) = err_handle { let _ = h.join(); }
+    #[cfg(unix)]
+    if let Some(pg) = pgid { untrack_pgid(pg); }
+    let out = out_buf.lock().unwrap();
+    // Obtain the final exit status
+    let success = child.wait().map(|s| s.success()).unwrap_or(false);
+    Ok((String::from_utf8_lossy(&out).to_string(), success))
+}

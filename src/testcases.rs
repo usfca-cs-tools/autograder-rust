@@ -131,7 +131,11 @@ impl TestRunner {
                 if !mfu.is_file() && !mfl.is_file() { return Some(format!("Makefile not found: {}", mfu.display())); }
                 let cmd = vec!["make".to_string(), "-C".to_string(), repo.local_path.to_string_lossy().to_string()];
                 let opts = ExecOptions { cwd: None, timeout: Duration::from_secs(30), capture_stderr: true, output_limit: 220_000 };
-                match exec_capture(&cmd, &opts) { Ok(_) => None, Err(_) => Some("Program did not make successfully".into()) }
+                match crate::cmd::exec_capture_with_status(&cmd, &opts) {
+                    Ok((_out, true)) => None,
+                    Ok((_out, false)) => Some("Program did not make successfully".into()),
+                    Err(_) => Some("Program did not make successfully".into()),
+                }
             }
             other => Some(format!("Unknown build plan: \"{}\"", other)),
         }
@@ -145,7 +149,20 @@ impl TestRunner {
         let mut cmdline: Vec<String> = vec![];
         for i in tc.input.iter() { cmdline.push(self.interpolate(i, &tc.name)); }
         let actual_res = if tc.output == "stdout" {
-            exec_capture(&cmdline, &opts)
+            match crate::cmd::exec_capture_with_status(&cmdline, &opts) {
+                Ok((out, true)) => Ok(out),
+                Ok((out, false)) => {
+                    // Non-zero exit; if likely exec format (no output), surface Python-like error
+                    let exe = cmdline.get(0).cloned().unwrap_or_else(|| "./program".into());
+                    if out.trim().is_empty() {
+                        Err(crate::cmd::ExecError::Io(std::io::Error::from_raw_os_error(8)))
+                    } else {
+                        // Treat as mismatch by returning output; score stays 0
+                        Ok(out)
+                    }
+                }
+                Err(e) => Err(e),
+            }
         } else {
             let _ = exec_capture(&cmdline, &opts);
             let f = repo.local_path.join(&tc.output);
@@ -162,6 +179,12 @@ impl TestRunner {
                 let msg = match e {
                     crate::cmd::ExecError::Timeout(_) => "Program timed out (infinite loop?)".to_string(),
                     crate::cmd::ExecError::OutputLimit(_) => "Program produced too much output (infinite loop?)".to_string(),
+                    crate::cmd::ExecError::Io(ref ioe) if ioe.raw_os_error() == Some(8) => {
+                        let exe = cmdline.get(0).cloned().unwrap_or_else(|| "./program".into());
+                        format!("OSError: [Errno 8] Exec format error: '{}'", exe)
+                    }
+                    crate::cmd::ExecError::Io(ref ioe) if ioe.kind() == std::io::ErrorKind::NotFound =>
+                        "Program not found (build failed?)".to_string(),
                     crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
                 };
                 result.test_err = Some(msg);
@@ -214,14 +237,32 @@ impl TestRunner {
     }
 
     fn make_comment(&self, repo_result: &RepoResult) -> String {
-        let mut s = String::new();
-        if let Some(be) = &repo_result.build_err { s.push_str(be); s.push(' '); }
+        // Match Python formatting of comment body
+        let mut out = String::new();
+        let mut cur_line = String::new();
+        if let Some(be) = &repo_result.build_err { cur_line.push_str(be); cur_line.push(' '); }
         for r in &repo_result.results {
-            s.push_str(&format_pass_fail(&r.test, r.rubric, r.score));
-            if let Some(e) = &r.test_err { s.push(' '); s.push_str(e); }
+            let label = format_pass_fail(&r.test, r.rubric, r.score);
+            if let Some(e) = &r.test_err {
+                cur_line.push_str(&label);
+                cur_line.push_str("    ");
+                cur_line.push_str(e);
+                if !cur_line.ends_with('\n') { cur_line.push('\n'); }
+                out.push_str(&cur_line);
+                cur_line.clear();
+            } else {
+                // Label already includes trailing space; do not add extra space
+                cur_line.push_str(&label);
+            }
         }
-        s.push_str(&self.make_earned_avail(repo_result));
-        s
+        let earned = self.make_earned_avail(repo_result);
+        if cur_line.is_empty() {
+            out.push_str(&earned);
+        } else {
+            cur_line.push_str(&earned);
+            out.push_str(&cur_line);
+        }
+        out
     }
 
     fn make_earned_avail(&self, repo_result: &RepoResult) -> String {
@@ -243,7 +284,7 @@ impl TestRunner {
         let score = results.iter().map(|r| r.score).sum();
         let mut repo_result = RepoResult { comment: String::new(), results, score, student: repo.student.clone(), build_err };
         repo_result.comment = self.make_comment(&repo_result);
-        println!("{}", self.make_earned_avail(&repo_result));
+        if !self.quiet { println!("{}", self.make_earned_avail(&repo_result)); }
         Ok(repo_result)
     }
 
