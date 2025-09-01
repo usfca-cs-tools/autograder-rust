@@ -154,7 +154,7 @@ fn main() {
                 if let Err(e) = runner.write_class_json(&only_results, suffix_opt.as_deref()) { print_red(&format!("{}\n", e)); std::process::exit(3); }
             }
         }
-        Commands::Exec { project, exec_cmd, students } => {
+        Commands::Exec { project, exec_cmd, students, jobs } => {
             // Build repo list from students (like pull), honoring project subdir
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
             if list.is_empty() {
@@ -166,21 +166,46 @@ fn main() {
             let mut repos = vec![];
             for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, runner.project_subdir(), None)); }
             let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
-            for r in &repos {
-                util::print_justified(&r.display_label, longest);
-                use crate::cmd::{exec_capture, ExecOptions};
-                let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
-                // Execute via shell like Python's shell=True
-                let cmdline = vec![String::from("/bin/sh"), String::from("-c"), exec_cmd.clone()];
-                match exec_capture(&cmdline, &opts) {
-                    Ok(out) => println!("{}", out),
-                    Err(e) => print_red(&format!("{}\n", match e {
-                        crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
-                        crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
-                        crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
-                    })),
+
+            // Parallel execution with ordered, incremental printing
+            let threads = jobs.unwrap_or_else(num_cpus);
+            let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+            let mut next_to_print: usize = 0;
+            let mut pending: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            pool.scope(|s| {
+                let (tx, rx) = crossbeam_channel::unbounded();
+                for r in &repos {
+                    let r = r.clone();
+                    let tx = tx.clone();
+                    let cmd = exec_cmd.clone();
+                    s.spawn(move |_| {
+                        use crate::cmd::{exec_capture, ExecOptions};
+                        let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
+                        let cmdline = vec![String::from("/bin/sh"), String::from("-c"), cmd];
+                        let output = match exec_capture(&cmdline, &opts) {
+                            Ok(out) => out,
+                            Err(e) => match e {
+                                crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
+                                crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
+                                crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
+                            }
+                        };
+                        let _ = tx.send((r.display_label.clone(), output));
+                    });
                 }
-            }
+                drop(tx);
+                for (lbl, out) in rx.iter() {
+                    pending.insert(lbl.clone(), out);
+                    while next_to_print < repos.len() {
+                        let elbl = &repos[next_to_print].display_label;
+                        if let Some(text) = pending.remove(elbl) {
+                            util::print_justified(elbl, longest);
+                            println!("{}", text);
+                            next_to_print += 1;
+                        } else { break; }
+                    }
+                }
+            });
         }
         Commands::Clone { project, students, verbose, date, by_date } => {
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };

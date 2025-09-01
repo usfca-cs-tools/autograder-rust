@@ -54,6 +54,8 @@ pub enum Commands {
         exec_cmd: String,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
+        #[arg(short = 'j', long = "jobs", help = "Number of parallel jobs (default: CPUs)")]
+        jobs: Option<usize>,
     },
     Clone {
         #[arg(short = 'p', long = "project")]
