@@ -88,51 +88,74 @@ fn main() {
                 let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
                 // Avoid interleaved stdout noise when verbose; run single-threaded then
                 let threads = if *verbose || *very_verbose { 1 } else { jobs.unwrap_or_else(num_cpus) };
-                let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
                 let mut class_results: Vec<(Repo, testcases::RepoResult)> = vec![];
-                let mut next_to_print: usize = 0;
-                let mut pending: std::collections::HashMap<String, testcases::RepoResult> = std::collections::HashMap::new();
-                pool.scope(|s| {
-                    let (tx, rx) = crossbeam_channel::unbounded();
+                if threads == 1 {
+                    // Sequential execution to avoid deadlock when the scope runs on the single worker
                     for r in &repos {
-                        let r = r.clone();
-                        let tx = tx.clone();
-                        // Clone minimal runner state per thread by creating a new runner
                         let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
                         runner_local.set_quiet(true);
-                        s.spawn(move |_| {
-                            let res = runner_local.test_repo(&r, None).map(|rr| (r, rr));
-                            let _ = tx.send(res);
-                        });
-                    }
-                    drop(tx);
-                    for res in rx.iter() {
-                        match res {
-                            Ok((repo_done, rr)) => {
-                                // Buffer result, then print any ready entries in original order
-                                pending.insert(repo_done.display_label.clone(), rr.clone());
-                                class_results.push((repo_done, rr));
-                                while next_to_print < repos.len() {
-                                    let lbl = &repos[next_to_print].display_label;
-                                    if let Some(rrp) = pending.remove(lbl) {
-                                        util::print_justified(lbl, longest);
-                                        if rrp.results.is_empty() {
-                                            println!("{}", rrp.comment);
-                                        } else {
-                                            for t in &rrp.results {
-                                                let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
-                                                if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
-                                            }
-                                            println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rrp.results));
-                                        }
-                                        next_to_print += 1;
-                                    } else { break; }
+                        match runner_local.test_repo(r, None) {
+                            Ok(rr) => {
+                                util::print_justified(&r.display_label, longest);
+                                if rr.results.is_empty() { println!("{}", rr.comment); }
+                                else {
+                                    for t in &rr.results {
+                                        let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                                        if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                                    }
+                                    println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
                                 }
+                                class_results.push((r.clone(), rr));
                             }
                             Err(e) => print_red(&format!("{}\n", e)),
                         }
                     }
-                });
+                } else {
+                    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+                    let mut next_to_print: usize = 0;
+                    let mut pending: std::collections::HashMap<String, testcases::RepoResult> = std::collections::HashMap::new();
+                    pool.scope(|s| {
+                        let (tx, rx) = crossbeam_channel::unbounded();
+                        for r in &repos {
+                            let r = r.clone();
+                            let tx = tx.clone();
+                            // Clone minimal runner state per thread by creating a new runner
+                            let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
+                            runner_local.set_quiet(true);
+                            s.spawn(move |_| {
+                                let res = runner_local.test_repo(&r, None).map(|rr| (r, rr));
+                                let _ = tx.send(res);
+                            });
+                        }
+                        drop(tx);
+                        for res in rx.iter() {
+                            match res {
+                                Ok((repo_done, rr)) => {
+                                    // Buffer result, then print any ready entries in original order
+                                    pending.insert(repo_done.display_label.clone(), rr.clone());
+                                    class_results.push((repo_done, rr));
+                                    while next_to_print < repos.len() {
+                                        let lbl = &repos[next_to_print].display_label;
+                                        if let Some(rrp) = pending.remove(lbl) {
+                                            util::print_justified(lbl, longest);
+                                            if rrp.results.is_empty() {
+                                                println!("{}", rrp.comment);
+                                            } else {
+                                                for t in &rrp.results {
+                                                    let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                                                    if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                                                }
+                                                println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rrp.results));
+                                            }
+                                            next_to_print += 1;
+                                        } else { break; }
+                                    }
+                                }
+                                Err(e) => print_red(&format!("{}\n", e)),
+                            }
+                        }
+                    });
+                }
                 // Persist histogram and JSON
                 let mut only_results: Vec<testcases::RepoResult> = class_results.into_iter().map(|(_, rr)| rr).collect();
                 // Prepend commit header to comments for JSON persistence
@@ -176,43 +199,60 @@ fn main() {
 
             // Parallel execution with ordered, incremental printing
             let threads = jobs.unwrap_or_else(num_cpus);
-            let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
-            let mut next_to_print: usize = 0;
-            let mut pending: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-            pool.scope(|s| {
-                let (tx, rx) = crossbeam_channel::unbounded();
+            if threads == 1 {
                 for r in &repos {
-                    let r = r.clone();
-                    let tx = tx.clone();
-                    let cmd = exec_cmd.clone();
-                    s.spawn(move |_| {
-                        use crate::cmd::{exec_capture, ExecOptions};
-                        let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
-                        let cmdline = vec![String::from("/bin/sh"), String::from("-c"), cmd];
-                        let output = match exec_capture(&cmdline, &opts) {
-                            Ok(out) => out,
-                            Err(e) => match e {
-                                crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
-                                crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
-                                crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
-                            }
-                        };
-                        let _ = tx.send((r.display_label.clone(), output));
-                    });
-                }
-                drop(tx);
-                for (lbl, out) in rx.iter() {
-                    pending.insert(lbl.clone(), out);
-                    while next_to_print < repos.len() {
-                        let elbl = &repos[next_to_print].display_label;
-                        if let Some(text) = pending.remove(elbl) {
-                            util::print_justified(elbl, longest);
-                            println!("{}", text);
-                            next_to_print += 1;
-                        } else { break; }
+                    use crate::cmd::{exec_capture, ExecOptions};
+                    util::print_justified(&r.display_label, longest);
+                    let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
+                    let cmdline = vec![String::from("/bin/sh"), String::from("-c"), exec_cmd.clone()];
+                    match exec_capture(&cmdline, &opts) {
+                        Ok(out) => println!("{}", out),
+                        Err(e) => println!("{}", match e {
+                            crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
+                            crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
+                            crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
+                        }),
                     }
                 }
-            });
+            } else {
+                let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+                let mut next_to_print: usize = 0;
+                let mut pending: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+                pool.scope(|s| {
+                    let (tx, rx) = crossbeam_channel::unbounded();
+                    for r in &repos {
+                        let r = r.clone();
+                        let tx = tx.clone();
+                        let cmd = exec_cmd.clone();
+                        s.spawn(move |_| {
+                            use crate::cmd::{exec_capture, ExecOptions};
+                            let opts = ExecOptions { cwd: Some(r.local_path.to_string_lossy().to_string()), ..Default::default() };
+                            let cmdline = vec![String::from("/bin/sh"), String::from("-c"), cmd];
+                            let output = match exec_capture(&cmdline, &opts) {
+                                Ok(out) => out,
+                                Err(e) => match e {
+                                    crate::cmd::ExecError::Timeout(_) => "Command timed out".into(),
+                                    crate::cmd::ExecError::OutputLimit(_) => "Output limit exceeded".into(),
+                                    crate::cmd::ExecError::Io(ioe) => format!("IO error: {}", ioe),
+                                }
+                            };
+                            let _ = tx.send((r.display_label.clone(), output));
+                        });
+                    }
+                    drop(tx);
+                    for (lbl, out) in rx.iter() {
+                        pending.insert(lbl.clone(), out);
+                        while next_to_print < repos.len() {
+                            let elbl = &repos[next_to_print].display_label;
+                            if let Some(text) = pending.remove(elbl) {
+                                util::print_justified(elbl, longest);
+                                println!("{}", text);
+                                next_to_print += 1;
+                            } else { break; }
+                        }
+                    }
+                });
+            }
         }
         Commands::Clone { project, students, verbose, date, by_date } => {
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
