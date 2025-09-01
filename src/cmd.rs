@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use std::thread;
@@ -44,6 +44,10 @@ fn track_pgid(pgid: pid_t) {
         let s = Mutex::new(HashSet::new());
         let set_ptr: &'static Mutex<HashSet<pid_t>> = unsafe { std::mem::transmute(&s) };
         let _ = ctrlc::set_handler(move || {
+            // Ensure cursor is visible if any UI hid it
+            let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25h\n");
+            let _ = std::io::stdout().flush();
+            // Terminate any tracked process groups
             if let Ok(guard) = set_ptr.lock() {
                 for &pg in guard.iter() { unsafe { libc::kill(-pg, libc::SIGTERM); } }
             }
