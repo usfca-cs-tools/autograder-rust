@@ -314,7 +314,9 @@ impl TestRunner {
         let mut freqs: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
         for r in class_results { *freqs.entry(r.score).or_default() += 1; }
         println!("\nScore frequency (n = {})", class_results.len());
-        for (score, freq) in freqs { let pct = (freq as f64) / (class_results.len() as f64) * 100.0; println!("{}/{}: {}  ({:.1}%)", score, avail, freq, pct); }
+        let mut items: Vec<(i64, usize)> = freqs.into_iter().collect();
+        items.sort_by(|a, b| b.0.cmp(&a.0)); // descending by score
+        for (score, freq) in items { let pct = (freq as f64) / (class_results.len() as f64) * 100.0; println!("{}/{}: {}  ({:.1}%)", score, avail, freq, pct); }
     }
 
     pub fn write_class_json(&self, class_results: &[RepoResult], suffix: Option<&str>) -> anyhow::Result<()> {
