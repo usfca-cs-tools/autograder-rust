@@ -90,6 +90,8 @@ fn main() {
                 let threads = if *verbose || *very_verbose { 1 } else { jobs.unwrap_or_else(num_cpus) };
                 let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
                 let mut class_results: Vec<(Repo, testcases::RepoResult)> = vec![];
+                let mut next_to_print: usize = 0;
+                let mut pending: std::collections::HashMap<String, testcases::RepoResult> = std::collections::HashMap::new();
                 pool.scope(|s| {
                     let (tx, rx) = crossbeam_channel::unbounded();
                     for r in &repos {
@@ -107,18 +109,25 @@ fn main() {
                     for res in rx.iter() {
                         match res {
                             Ok((repo_done, rr)) => {
-                                // Print incrementally as results arrive
-                                util::print_justified(&repo_done.display_label, longest);
-                                if rr.results.is_empty() {
-                                    println!("{}", rr.comment);
-                                } else {
-                                    for t in &rr.results {
-                                        let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
-                                        if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
-                                    }
-                                    println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
-                                }
+                                // Buffer result, then print any ready entries in original order
+                                pending.insert(repo_done.display_label.clone(), rr.clone());
                                 class_results.push((repo_done, rr));
+                                while next_to_print < repos.len() {
+                                    let lbl = &repos[next_to_print].display_label;
+                                    if let Some(rrp) = pending.remove(lbl) {
+                                        util::print_justified(lbl, longest);
+                                        if rrp.results.is_empty() {
+                                            println!("{}", rrp.comment);
+                                        } else {
+                                            for t in &rrp.results {
+                                                let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                                                if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                                            }
+                                            println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rrp.results));
+                                        }
+                                        next_to_print += 1;
+                                    } else { break; }
+                                }
                             }
                             Err(e) => print_red(&format!("{}\n", e)),
                         }
