@@ -234,35 +234,35 @@ impl TestRunner {
     fn make_comment(&self, repo_result: &RepoResult) -> String {
         // Match Python formatting of comment body
         let mut out = String::new();
-        let mut pass_labels: Vec<String> = Vec::new();
+        let mut pass_concat = String::new();
         let mut prefix = String::new();
         if let Some(be) = &repo_result.build_err { prefix.push_str(be); prefix.push(' '); }
         for r in &repo_result.results {
-            let label = format!("{}({}/{})", r.test, r.score, r.rubric);
+            let label = format_pass_fail(&r.test, r.rubric, r.score);
             if let Some(e) = &r.test_err {
                 // Flush any accumulated passing labels as a single-spaced line first
-                if !pass_labels.is_empty() {
+                if !pass_concat.is_empty() {
                     out.push_str(&prefix);
-                    out.push_str(&pass_labels.join(" "));
+                    out.push_str(&pass_concat);
                     out.push('\n');
-                    pass_labels.clear();
+                    pass_concat.clear();
                     prefix.clear();
                 }
                 out.push_str(&prefix);
-                out.push_str(&label);
+                // For error lines, trim trailing padding from the label to match Python
+                out.push_str(label.trim_end());
                 out.push_str("    ");
                 out.push_str(e);
                 if !out.ends_with('\n') { out.push('\n'); }
                 prefix.clear();
             } else {
-                pass_labels.push(label);
+                pass_concat.push_str(&label);
             }
         }
         let earned = self.make_earned_avail(repo_result);
-        if !pass_labels.is_empty() {
+        if !pass_concat.is_empty() {
             out.push_str(&prefix);
-            out.push_str(&pass_labels.join(" "));
-            out.push(' ');
+            out.push_str(&pass_concat);
             out.push_str(&earned);
         } else {
             if out.is_empty() { out.push_str(&prefix); }
