@@ -32,9 +32,10 @@ impl Dates {
         if self.items.is_empty() { return None; }
         if self.items.len() == 1 { return self.items.get(0); }
         match arrow_select(&self.items) {
-            Some(i) => self.items.get(i),
-            None => {
-                // Fallback to numeric prompt
+            ArrowOutcome::Pick(i) => self.items.get(i),
+            ArrowOutcome::Aborted => None, // user pressed 'q' — abort entirely
+            ArrowOutcome::Unsupported => {
+                // Fallback to numeric prompt only when interactive arrows unsupported
                 println!("Select date:");
                 for (i, d) in self.items.iter().enumerate() {
                     println!("{}: {} {}", i + 1, d.suffix, d.date);
@@ -78,13 +79,15 @@ fn set_raw_mode(enable: bool, old: &mut libc::termios) -> std::io::Result<()> {
     Ok(())
 }
 
-fn arrow_select(items: &[DateItem]) -> Option<usize> {
-    if !is_tty() { return None; }
+enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
+
+fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
+    if !is_tty() { return ArrowOutcome::Unsupported; }
     #[cfg(unix)]
     unsafe {
         use std::io::{Read, Write};
         let mut old = std::mem::zeroed();
-        if set_raw_mode(true, &mut old).is_err() { return None; }
+        if set_raw_mode(true, &mut old).is_err() { return ArrowOutcome::Unsupported; }
         struct RawGuard<'a> { old: &'a mut libc::termios }
         impl<'a> Drop for RawGuard<'a> { fn drop(&mut self) { let _ = set_raw_mode(false, self.old); } }
         let _guard = RawGuard { old: &mut old };
@@ -110,12 +113,12 @@ fn arrow_select(items: &[DateItem]) -> Option<usize> {
         let mut stdin = std::io::stdin();
         let mut buf = [0u8; 3];
         loop {
-            if stdin.read(&mut buf).ok()? == 0 { return None; }
+            if stdin.read(&mut buf).ok().unwrap_or(0) == 0 { return ArrowOutcome::Aborted; }
             match buf {
-                [b'\r', ..] | [b'\n', ..] => { println!(""); return Some(sel as usize); }
+                [b'\r', ..] | [b'\n', ..] => { println!(""); return ArrowOutcome::Pick(sel as usize); }
                 [0x1b, b'[', b'A'] => { if sel > 0 { sel -= 1; } }
                 [0x1b, b'[', b'B'] => { if sel < (items.len() as isize - 1) { sel += 1; } }
-                [b'q', ..] => { print_yellow("No selection made\n"); return None; }
+                [b'q', ..] => { print_yellow("No selection made\n"); return ArrowOutcome::Aborted; }
                 _ => {}
             }
             // Move cursor up to redraw (1 for prompt + N items)
@@ -128,8 +131,8 @@ fn arrow_select(items: &[DateItem]) -> Option<usize> {
         }
     }
     #[allow(unreachable_code)]
-    None
+    ArrowOutcome::Unsupported
 }
 
 #[cfg(not(unix))]
-fn arrow_select(_items: &[DateItem]) -> Option<usize> { None }
+fn arrow_select(_items: &[DateItem]) -> ArrowOutcome { ArrowOutcome::Unsupported }

@@ -78,12 +78,12 @@ fn main() {
                 // Suppress internal per-test and trailing prints; we'll print summaries ourselves
                 runner.set_quiet(true);
                 let (suffix_opt, _date_opt) = if *by_date {
-                    let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
-                        Ok(d) => d,
-                        Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
-                    };
-                    match d.select() { Some(sel) => (Some(sel.suffix.clone()), Some(sel.date.clone())), None => (None, None) }
-                } else { (None, None) };
+                let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
+                    Ok(d) => d,
+                    Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
+                };
+                match d.select() { Some(sel) => (Some(sel.suffix.clone()), Some(sel.date.clone())), None => { return; } }
+            } else { (None, None) };
                 let repos: Vec<Repo> = list.into_iter().map(|s| Repo::student(project_name.clone(), s, runner.project_subdir(), suffix_opt.clone())).collect();
                 let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
                 // Avoid interleaved stdout noise when verbose; run single-threaded then
@@ -168,7 +168,7 @@ fn main() {
                     Ok(d) => d,
                     Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
                 };
-                d.select().map(|sel| sel.suffix.clone())
+                match d.select() { Some(sel) => Some(sel.suffix.clone()), None => { return; } }
             } else { None };
             let mut repos = vec![];
             for s in list { repos.push(testcases::Repo::student(project_name.clone(), s, runner.project_subdir(), suffix_opt.clone())); }
@@ -228,7 +228,7 @@ fn main() {
                     Ok(d) => d,
                     Err(e) => { print_red(&format!("{}\n", e)); std::process::exit(2); }
                 };
-                match d.select() { Some(sel) => (Some(sel.suffix.clone()), Some(sel.date.clone())), None => (None, None) }
+                match d.select() { Some(sel) => (Some(sel.suffix.clone()), Some(sel.date.clone())), None => { return; } }
             } else { (None, date.clone()) };
 
             let mut repos = vec![];
