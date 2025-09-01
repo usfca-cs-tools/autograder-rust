@@ -1,0 +1,26 @@
+[
+  {
+    "comment": "",
+    "results": [
+      {
+        "rubric": 3,
+        "score": 3,
+        "test": "01"
+      }
+    ],
+    "score": 3,
+    "student": "alice"
+  },
+  {
+    "comment": "",
+    "results": [
+      {
+        "rubric": 7,
+        "score": 7,
+        "test": "01"
+      }
+    ],
+    "score": 7,
+    "student": "bob"
+  }
+]
