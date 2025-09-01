@@ -105,28 +105,25 @@ fn main() {
                     }
                     drop(tx);
                     for res in rx.iter() {
-                        match res { Ok(pair) => class_results.push(pair), Err(e) => print_red(&format!("{}\n", e)) }
+                        match res {
+                            Ok((repo_done, rr)) => {
+                                // Print incrementally as results arrive
+                                util::print_justified(&repo_done.display_label, longest);
+                                if rr.results.is_empty() {
+                                    println!("{}", rr.comment);
+                                } else {
+                                    for t in &rr.results {
+                                        let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                                        if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                                    }
+                                    println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
+                                }
+                                class_results.push((repo_done, rr));
+                            }
+                            Err(e) => print_red(&format!("{}\n", e)),
+                        }
                     }
                 });
-                // Print one-line summaries in the original repos order
-                for r in &repos {
-                    if let Some((_, rr)) = class_results.iter().find(|(rp, _)| rp.display_label == r.display_label) {
-                        util::print_justified(&r.display_label, longest);
-                        if rr.results.is_empty() {
-                            println!("{}", rr.comment);
-                        } else {
-                            // Colorize per-test tokens like Python (green pass, red fail)
-                            for t in &rr.results {
-                                let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
-                                if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
-                            }
-                            println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
-                        }
-                    } else {
-                        util::print_justified(&r.display_label, longest);
-                        println!("error: missing result");
-                    }
-                }
                 // Persist histogram and JSON
                 let mut only_results: Vec<testcases::RepoResult> = class_results.into_iter().map(|(_, rr)| rr).collect();
                 // Prepend commit header to comments for JSON persistence
