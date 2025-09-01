@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::config::GitCfg;
 use crate::testcases::Repo;
@@ -45,6 +45,16 @@ impl Git {
         Ok(status.success())
     }
 
+    fn run_ok_quiet(args: &[&str], cwd: Option<&PathBuf>) -> anyhow::Result<bool> {
+        let mut cmd = Command::new(args[0]);
+        if args.len() > 1 { cmd.args(&args[1..]); }
+        if let Some(dir) = cwd { cmd.current_dir(dir); }
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
+        let status = cmd.status()?;
+        Ok(status.success())
+    }
+
     fn get_default_branch(local: &PathBuf) -> anyhow::Result<String> {
         let s = Self::run_capture(&["git", "remote", "show", "origin"], Some(local))?;
         for line in s.lines() {
@@ -68,7 +78,7 @@ impl Git {
         Ok(hash)
     }
 
-    pub fn clone_repo(&self, project: &str, repo: &Repo, date: Option<&str>) {
+    pub fn clone_repo(&self, project: &str, repo: &Repo, date: Option<&str>, verbose: bool) {
         // repo.local_path is ./project-student
         if repo.local_path.is_dir() {
             println!("Already exists: {}", repo.local_path.display());
@@ -76,7 +86,11 @@ impl Git {
         }
         let remote = format!("{}-{}", project, repo.student.clone().unwrap_or_default());
         let url = self.remote_url(&remote);
-        let ok = Self::run_ok(&["git", "clone", &url, &repo.local_path.to_string_lossy()], None)
+        let ok = if verbose {
+            Self::run_ok(&["git", "clone", &url, &repo.local_path.to_string_lossy()], None)
+        } else {
+            Self::run_ok_quiet(&["git", "clone", &url, &repo.local_path.to_string_lossy()], None)
+        }
             .unwrap_or(false);
         if !ok { print_red("No remote repo or clone failed\n"); return; }
 
@@ -84,10 +98,16 @@ impl Git {
             // Checkout commit before date on default branch
             match Self::get_default_branch(&repo.local_path) {
                 Ok(branch) => match Self::get_commit_before(&repo.local_path, &branch, d) {
-                    Ok(hash) => { let _ = Self::run_ok(&["git", "checkout", &hash], Some(&repo.local_path)); },
+                    Ok(hash) => {
+                        let _ = if verbose {
+                            Self::run_ok(&["git", "checkout", &hash], Some(&repo.local_path))
+                        } else {
+                            Self::run_ok_quiet(&["git", "checkout", &hash], Some(&repo.local_path))
+                        };
+                    },
                     Err(_) => {
                         // No commits in range: remove local repo to match Python behavior
-                        let _ = Self::run_ok(&["rm", "-rf", &repo.local_path.to_string_lossy()], None);
+                        let _ = Self::run_ok_quiet(&["rm", "-rf", &repo.local_path.to_string_lossy()], None);
                     }
                 },
                 Err(_) => {}

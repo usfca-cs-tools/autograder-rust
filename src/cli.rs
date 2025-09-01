@@ -58,6 +58,8 @@ pub enum Commands {
         project: Option<String>,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
+        #[arg(short = 'v', long = "verbose")]
+        verbose: bool,
         #[arg(long = "date", help = "Checkout commit before this 'YYYY-MM-DD[ HH:MM:SS]' date")] 
         date: Option<String>,
         #[arg(short = 'd', long = "by-date", help = "Select a date from dates.toml for suffix and checkout context")] 

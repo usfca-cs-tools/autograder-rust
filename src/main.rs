@@ -115,7 +115,7 @@ fn main() {
             print_red(&format!("exec not implemented yet: {}\n", exec_cmd));
             std::process::exit(64);
         }
-        Commands::Clone { project, students, date, by_date } => {
+        Commands::Clone { project, students, verbose, date, by_date } => {
             let list: Vec<String> = if let Some(list) = students { list.clone() } else { config.config.students.clone() };
             if list.is_empty() {
                 print_red("No students provided and Config.students is empty\n");
@@ -137,7 +137,7 @@ fn main() {
             let longest = repos.iter().map(|r| r.display_label.len()).max().unwrap_or(0) + 1;
             for r in repos.iter() {
                 util::print_justified(&r.display_label, longest);
-                g.clone_repo(&project_name, r, date_opt.as_deref());
+                g.clone_repo(&project_name, r, date_opt.as_deref(), *verbose);
             }
         }
         Commands::Pull { project, students } => {
