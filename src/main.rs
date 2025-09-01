@@ -296,6 +296,59 @@ fn main() {
                 println!();
             }
         }
+
+        Commands::View { project, file, by_date, no_color } => {
+            util::set_color_enabled(!*no_color && std::env::var("NO_COLOR").is_err());
+            let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
+            let json_path = if *by_date && file.is_none() {
+                let mut files: Vec<String> = std::fs::read_dir(".")
+                    .unwrap_or_else(|_| panic!("cannot read current directory"))
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+                    .filter_map(|e| { let p = e.path(); if p.extension().and_then(|s| s.to_str()) == Some("json") { Some(p.file_name().unwrap().to_string_lossy().to_string()) } else { None } })
+                    .collect();
+                files.sort();
+                if files.is_empty() { println!("No JSON files found"); return; }
+                match canvas::arrow_select_strings(&files) {
+                    canvas::ArrowOutcome::Pick(i) => files[i].clone(),
+                    canvas::ArrowOutcome::Aborted => return,
+                    canvas::ArrowOutcome::Unsupported => files[0].clone(),
+                }
+            } else { file.as_deref().map(|s| s.to_string()).unwrap_or_else(|| format!("{}.json", project_name)) };
+
+            let data = match std::fs::read_to_string(&json_path) { Ok(s) => s, Err(e) => { print_red(&format!("{}
+", e)); return; } };
+            let results: Vec<testcases::RepoResult> = match serde_json::from_str(&data) { Ok(v) => v, Err(e) => { print_red(&format!("Failed to parse {}: {}
+", json_path, e)); return; } };
+
+            let mut suffix_opt: Option<String> = None;
+            if let Some(stem) = std::path::Path::new(&json_path).file_stem().and_then(|s| s.to_str()) {
+                let prefix = format!("{}-", project_name);
+                if stem.starts_with(&prefix) { suffix_opt = Some(stem[prefix.len()..].to_string()); }
+            }
+            let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            let subdir = runner.project_subdir();
+            let mut labels: Vec<String> = vec![];
+            for rr in &results {
+                let s = rr.student.clone().unwrap_or_else(|| "unknown".into());
+                let repo = Repo::student(project_name.clone(), s, subdir.clone(), suffix_opt.clone());
+                labels.push(repo.display_label);
+            }
+            let longest = labels.iter().map(|s| s.len()).max().unwrap_or(0) + 1;
+            for (rr, lbl) in results.iter().zip(labels.iter()) {
+                util::print_justified(lbl, longest);
+                if rr.results.is_empty() {
+                    println!("{}", rr.comment);
+                } else {
+                    for t in &rr.results {
+                        let tok = crate::util::format_pass_fail(&t.test, t.rubric, t.score);
+                        if t.score == t.rubric { crate::util::print_green(&tok); } else { crate::util::print_red(&tok); }
+                    }
+                    println!("{}", crate::testcases::TestRunner::make_earned_avail_static(&rr.results));
+                }
+            }
+            runner.print_histogram(&results);
+        }
         Commands::Upload { project, file, verbose, by_date } => {
             let project_name = project.clone().unwrap_or_else(|| util::project_from_cwd());
             if let Err(e) = canvas::upload_class(config.canvas.clone(), config.canvas_mapper.clone(), &project_name, file.as_deref(), *verbose, *by_date) {

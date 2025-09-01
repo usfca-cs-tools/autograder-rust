@@ -209,14 +209,14 @@ pub fn upload_class(canvas: CanvasCfg, mapper_cfg: CanvasMapperCfg, project: &st
     Ok(())
 }
 
-enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
+pub enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
 
 #[cfg(unix)]
 fn is_tty() -> bool { unsafe { libc::isatty(0) == 1 } }
 #[cfg(not(unix))]
 fn is_tty() -> bool { false }
 
-fn arrow_select_strings(items: &[String]) -> ArrowOutcome {
+pub fn arrow_select_strings(items: &[String]) -> ArrowOutcome {
     if !is_tty() { return ArrowOutcome::Unsupported; }
     #[cfg(unix)]
     unsafe {

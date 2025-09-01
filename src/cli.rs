@@ -93,6 +93,16 @@ pub enum Commands {
         #[arg(short = 'd', long = "by-date", help = "Use dates.toml to aggregate JSONs into a rollup")]
         by_date: bool,
     },
+    View {
+        #[arg(short = 'p', long = "project")]
+        project: Option<String>,
+        #[arg(long = "file", help = "Path to class results JSON; defaults to <project>.json")]
+        file: Option<String>,
+        #[arg(short = 'd', long = "by-date", help = "Select JSON from current dir (arrow keys)")]
+        by_date: bool,
+        #[arg(long = "no-color", help = "Disable ANSI color output")]
+        no_color: bool,
+    },
 }
 
 impl Cli {

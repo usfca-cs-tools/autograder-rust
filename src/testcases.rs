@@ -60,7 +60,7 @@ impl Repo {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TcResult {
     pub rubric: i64,
     pub score: i64,
@@ -68,7 +68,7 @@ pub struct TcResult {
     #[serde(skip_serializing_if = "Option::is_none")] pub test_err: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RepoResult {
     pub comment: String,
     pub results: Vec<TcResult>,
