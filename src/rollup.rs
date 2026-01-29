@@ -27,13 +27,20 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
     for d in dates {
         let fname = format!("{}-{}.json", project, d.suffix);
         let path = PathBuf::from(fname);
-        if !path.exists() { continue; }
+        if !path.exists() {
+            continue;
+        }
         let data = fs::read_to_string(&path)?;
         let list: Vec<RepoScore> = serde_json::from_str(&data)?;
         for r in list.into_iter() {
             let student = r.student.clone().unwrap_or_default();
-            if student.is_empty() { continue; }
-            by_student.entry(student).or_default().insert(d.suffix.clone(), r);
+            if student.is_empty() {
+                continue;
+            }
+            by_student
+                .entry(student)
+                .or_default()
+                .insert(d.suffix.clone(), r);
         }
     }
 
@@ -45,7 +52,10 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
         for d in dates {
             if let Some(r) = map.get(&d.suffix) {
                 let score = r.score;
-                let comment_line = format!("{}: {} + ({} - {}) * {} = ", d.suffix, rolled_score, score, rolled_score, d.percentage);
+                let comment_line = format!(
+                    "{}: {} + ({} - {}) * {} = ",
+                    d.suffix, rolled_score, score, rolled_score, d.percentage
+                );
                 if score != prev_score {
                     rolled_score += (score as f64 - rolled_score) * d.percentage;
                 }
@@ -55,11 +65,15 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
                 rolled_comment.push_str("\n\n");
                 rolled_comment.push_str(&comment_line);
                 rolled_comment.push_str(&final_line);
-                rolled_comment.push_str("\n");
+                rolled_comment.push('\n');
                 prev_score = score;
             }
         }
-        out.push(RolledItem { student: student.clone(), score: rolled_score, comment: rolled_comment });
+        out.push(RolledItem {
+            student: student.clone(),
+            score: rolled_score,
+            comment: rolled_comment,
+        });
     }
 
     let outpath = format!("{}-rollup.json", project);

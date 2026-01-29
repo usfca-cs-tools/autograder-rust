@@ -12,8 +12,12 @@ pub struct TestCfg {
     pub digital_path: String,
 }
 
-fn default_tests_path() -> String { String::from("~/tests") }
-fn default_digital_path() -> String { String::from("~/Digital/Digital.jar") }
+fn default_tests_path() -> String {
+    String::from("~/tests")
+}
+fn default_digital_path() -> String {
+    String::from("~/Digital/Digital.jar")
+}
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct ConfigCfg {
@@ -28,30 +32,46 @@ pub struct GitCfg {
     #[serde(default = "default_credentials")]
     pub credentials: String,
 }
-fn default_credentials() -> String { String::from("ssh") }
+fn default_credentials() -> String {
+    String::from("ssh")
+}
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct GithubCfg {
-    #[serde(default = "default_github_host")] pub host_name: String,
-    #[serde(default)] pub access_token: String,
+    #[serde(default = "default_github_host")]
+    pub host_name: String,
+    #[serde(default)]
+    pub access_token: String,
 }
-fn default_github_host() -> String { String::from("api.github.com") }
+fn default_github_host() -> String {
+    String::from("api.github.com")
+}
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct CanvasCfg {
-    #[serde(default)] pub host_name: String,
-    #[serde(default)] pub access_token: String,
-    #[serde(default)] pub course_name: String,
+    #[serde(default)]
+    pub host_name: String,
+    #[serde(default)]
+    pub access_token: String,
+    #[serde(default)]
+    pub course_name: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct CanvasMapperCfg {
-    #[serde(default)] pub map_path: String,
-    #[serde(default = "default_github_col")] pub github_col_name: String,
-    #[serde(default = "default_login_col")] pub login_col_name: String,
+    #[serde(default)]
+    pub map_path: String,
+    #[serde(default = "default_github_col")]
+    pub github_col_name: String,
+    #[serde(default = "default_login_col")]
+    pub login_col_name: String,
 }
-fn default_github_col() -> String { String::from("GitHub") }
-fn default_login_col() -> String { String::from("SIS Login ID") }
+fn default_github_col() -> String {
+    String::from("GitHub")
+}
+fn default_login_col() -> String {
+    String::from("SIS Login ID")
+}
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct Config {
@@ -87,7 +107,9 @@ pub struct Config {
 impl Config {
     pub fn load_or_create(path: &Path) -> anyhow::Result<Self> {
         if !path.exists() {
-            if let Some(parent) = path.parent() { fs::create_dir_all(parent)?; }
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
             fs::write(path, Self::default_toml())?;
             println!("Created config file: {}", path.display());
         }
@@ -144,9 +166,15 @@ pub fn resolve_config_path() -> PathBuf {
     let home = home_dir();
     loop {
         let p = dir.join(fname);
-        if p.exists() { return p; }
-        if dir == home { break; }
-        if !dir.pop() { break; }
+        if p.exists() {
+            return p;
+        }
+        if dir == home {
+            break;
+        }
+        if !dir.pop() {
+            break;
+        }
     }
     Path::new(&home).join(".config").join("grade").join(fname)
 }

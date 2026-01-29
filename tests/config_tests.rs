@@ -4,7 +4,10 @@ use autograder_rust::config::resolve_config_path;
 use serial_test::serial;
 
 fn set_env(k: &str, v: Option<&str>) {
-    match v { Some(val) => std::env::set_var(k, val), None => std::env::remove_var(k) }
+    match v {
+        Some(val) => std::env::set_var(k, val),
+        None => std::env::remove_var(k),
+    }
 }
 
 #[test]

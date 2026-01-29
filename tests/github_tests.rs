@@ -1,8 +1,8 @@
-use autograder_rust::github::Github;
 use autograder_rust::config::GithubCfg;
+use autograder_rust::github::Github;
 use httpmock::prelude::*;
-use zip::write::FileOptions;
 use std::io::Write;
+use zip::write::FileOptions;
 
 #[test]
 fn github_action_results_mock() {
@@ -29,7 +29,8 @@ fn github_action_results_mock() {
 
     // Mock runs/jobs
     let jobs_endpoint = server.mock(|when, then| {
-        when.method(GET).path("/repos/orgx/projx-alice/actions/runs/123/jobs");
+        when.method(GET)
+            .path("/repos/orgx/projx-alice/actions/runs/123/jobs");
         then.status(200)
             .header("content-type", "application/json")
             .body("{\"jobs\":[{\"id\":987}]}");
@@ -43,7 +44,10 @@ fn github_action_results_mock() {
             .body(buf.clone());
     });
 
-    let cfg = GithubCfg { host_name: base, access_token: String::from("tok") };
+    let cfg = GithubCfg {
+        host_name: base,
+        access_token: String::from("tok"),
+    };
     let gh = Github::new(cfg, "orgx".into(), "projx".into(), false).unwrap();
     let rr = gh.get_action_results("alice");
     assert_eq!(rr.score, 8);

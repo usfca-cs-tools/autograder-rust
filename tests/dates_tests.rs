@@ -7,7 +7,9 @@ fn dates_from_tests_path() {
     let tmp = tempfile::tempdir().unwrap();
     let tests = tmp.path().join("tests_repo");
     fs::create_dir_all(&tests).unwrap();
-    fs::write(tests.join("dates.toml"), r#"
+    fs::write(
+        tests.join("dates.toml"),
+        r#"
 [projx]
 
 [[projx.dates]]
@@ -19,11 +21,12 @@ percentage = 1.0
 suffix = "late"
 date = "2025-03-18"
 percentage = 0.5
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let d = Dates::from_tests_path(tests.to_str().unwrap(), "projx").unwrap();
     assert_eq!(d.items.len(), 2);
     assert_eq!(d.items[0].suffix, "due");
     assert_eq!(d.items[1].suffix, "late");
 }
-

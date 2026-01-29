@@ -1,7 +1,7 @@
 use std::fs;
 
-use autograder_rust::rollup::rollup;
 use autograder_rust::dates::DateItem;
+use autograder_rust::rollup::rollup;
 
 #[test]
 fn rollup_math_applies_improvements_only() {
@@ -17,7 +17,8 @@ fn rollup_math_applies_improvements_only() {
   {"student":"alice","score":5,"comment":""},
   {"student":"bob","score":7,"comment":""}
 ]"#,
-    ).unwrap();
+    )
+    .unwrap();
     // late: alice 8 (improvement 3 @ 50% => +1.5), bob 7 (no change)
     fs::write(
         cwd.join(format!("{}-late.json", project)),
@@ -25,11 +26,20 @@ fn rollup_math_applies_improvements_only() {
   {"student":"alice","score":8,"comment":""},
   {"student":"bob","score":7,"comment":""}
 ]"#,
-    ).unwrap();
+    )
+    .unwrap();
 
     let dates = vec![
-        DateItem { suffix: "due".into(), date: "2025-01-01".into(), percentage: 1.0 },
-        DateItem { suffix: "late".into(), date: "2025-01-08".into(), percentage: 0.5 },
+        DateItem {
+            suffix: "due".into(),
+            date: "2025-01-01".into(),
+            percentage: 1.0,
+        },
+        DateItem {
+            suffix: "late".into(),
+            date: "2025-01-08".into(),
+            percentage: 0.5,
+        },
     ];
 
     rollup(project, &dates).unwrap();

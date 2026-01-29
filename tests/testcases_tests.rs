@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use autograder_rust::config::TestCfg;
-use autograder_rust::testcases::{TestRunner, Repo};
+use autograder_rust::testcases::{Repo, TestRunner};
 
 fn write_mini_repo(base: &PathBuf, program_name: &str) -> PathBuf {
     let repo = base.join("repo");
@@ -36,7 +36,8 @@ exit 0
 fn write_tests_repo(base: &PathBuf, project: &str) -> PathBuf {
     let tests = base.join("tests_repo").join(project);
     fs::create_dir_all(&tests).unwrap();
-    let toml = format!(r#"
+    let toml = format!(
+        r#"
 [project]
 build = 'make'
 strip_output = ''
@@ -59,7 +60,8 @@ output = "04.txt"
 input = ["./$project", "-o", "04.txt"]
 expected = "04out"
 rubric = 5
-"#);
+"#
+    );
     fs::write(tests.join(format!("{}.toml", project)), toml).unwrap();
     tests.parent().unwrap().to_path_buf()
 }
@@ -72,7 +74,10 @@ fn test_runner_end_to_end() {
     let repo = write_mini_repo(&base, project);
     let tests_repo = write_tests_repo(&base, project);
 
-    let cfg = TestCfg { tests_path: tests_repo.to_string_lossy().to_string(), digital_path: String::from("~/Digital/Digital.jar") };
+    let cfg = TestCfg {
+        tests_path: tests_repo.to_string_lossy().to_string(),
+        digital_path: String::from("~/Digital/Digital.jar"),
+    };
     let mut runner = TestRunner::new(&cfg, false, false, false, project.to_string());
     // Create local repo object
     let repo_obj = Repo::local(repo.to_string_lossy().to_string(), runner.project_subdir());

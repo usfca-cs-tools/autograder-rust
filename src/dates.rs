@@ -12,25 +12,40 @@ pub struct DateItem {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct DatesTable { pub dates: Vec<DateItem> }
+pub struct DatesTable {
+    pub dates: Vec<DateItem>,
+}
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct DatesDoc { #[serde(flatten)] pub projects: std::collections::HashMap<String, DatesTable> }
+pub struct DatesDoc {
+    #[serde(flatten)]
+    pub projects: std::collections::HashMap<String, DatesTable>,
+}
 
-pub struct Dates { pub items: Vec<DateItem> }
+pub struct Dates {
+    pub items: Vec<DateItem>,
+}
 
 impl Dates {
     pub fn from_tests_path(tests_path: &str, project: &str) -> anyhow::Result<Self> {
         let path = Path::new(tests_path).join("dates.toml");
         let content = fs::read_to_string(&path)?;
         let doc: DatesDoc = toml::from_str(&content)?;
-        let table = doc.projects.get(project).ok_or_else(|| anyhow::anyhow!("No dates for project {} in {}", project, path.display()))?;
-        Ok(Dates { items: table.dates.clone() })
+        let table = doc.projects.get(project).ok_or_else(|| {
+            anyhow::anyhow!("No dates for project {} in {}", project, path.display())
+        })?;
+        Ok(Dates {
+            items: table.dates.clone(),
+        })
     }
 
     pub fn select(&self) -> Option<&DateItem> {
-        if self.items.is_empty() { return None; }
-        if self.items.len() == 1 { return self.items.get(0); }
+        if self.items.is_empty() {
+            return None;
+        }
+        if self.items.len() == 1 {
+            return self.items.first();
+        }
         match arrow_select(&self.items) {
             ArrowOutcome::Pick(i) => self.items.get(i),
             ArrowOutcome::Aborted => None, // user pressed 'q' — abort entirely
@@ -46,7 +61,10 @@ impl Dates {
                 let mut s = String::new();
                 let _ = io::stdin().read_line(&mut s);
                 let idx: usize = s.trim().parse().unwrap_or(0);
-                if idx == 0 || idx > self.items.len() { print_yellow("No selection made\n"); return None; }
+                if idx == 0 || idx > self.items.len() {
+                    print_yellow("No selection made\n");
+                    return None;
+                }
                 self.items.get(idx - 1)
             }
         }
@@ -54,10 +72,14 @@ impl Dates {
 }
 
 #[cfg(unix)]
-fn is_tty() -> bool { unsafe { libc::isatty(0) == 1 } }
+fn is_tty() -> bool {
+    unsafe { libc::isatty(0) == 1 }
+}
 
 #[cfg(not(unix))]
-fn is_tty() -> bool { false }
+fn is_tty() -> bool {
+    false
+}
 
 #[cfg(unix)]
 fn set_raw_mode(enable: bool, old: &mut libc::termios) -> std::io::Result<()> {
@@ -65,39 +87,62 @@ fn set_raw_mode(enable: bool, old: &mut libc::termios) -> std::io::Result<()> {
     unsafe {
         if enable {
             let mut t = MaybeUninit::<libc::termios>::uninit();
-            if libc::tcgetattr(0, t.as_mut_ptr()) != 0 { return Err(std::io::Error::last_os_error()); }
+            if libc::tcgetattr(0, t.as_mut_ptr()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
             *old = t.assume_init();
-            let mut raw = old.clone();
+            let mut raw = *old;
             // Disable canonical mode, echo, and signals (so Ctrl-C is just a byte 0x03)
             raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
             raw.c_cc[libc::VMIN] = 1;
             raw.c_cc[libc::VTIME] = 0;
-            if libc::tcsetattr(0, libc::TCSANOW, &raw) != 0 { return Err(std::io::Error::last_os_error()); }
-        } else {
-            if libc::tcsetattr(0, libc::TCSANOW, old) != 0 { return Err(std::io::Error::last_os_error()); }
+            if libc::tcsetattr(0, libc::TCSANOW, &raw) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        } else if libc::tcsetattr(0, libc::TCSANOW, old) != 0 {
+            return Err(std::io::Error::last_os_error());
         }
     }
     Ok(())
 }
 
-enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
+enum ArrowOutcome {
+    Pick(usize),
+    Aborted,
+    Unsupported,
+}
 
 #[cfg(unix)]
 fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
-    if !is_tty() { return ArrowOutcome::Unsupported; }
+    if !is_tty() {
+        return ArrowOutcome::Unsupported;
+    }
     unsafe {
         use std::io::{Read, Write};
         let mut old = std::mem::zeroed();
-        if set_raw_mode(true, &mut old).is_err() { return ArrowOutcome::Unsupported; }
-        struct RawGuard<'a> { old: &'a mut libc::termios }
-        impl<'a> Drop for RawGuard<'a> { fn drop(&mut self) { let _ = set_raw_mode(false, self.old); } }
+        if set_raw_mode(true, &mut old).is_err() {
+            return ArrowOutcome::Unsupported;
+        }
+        struct RawGuard<'a> {
+            old: &'a mut libc::termios,
+        }
+        impl<'a> Drop for RawGuard<'a> {
+            fn drop(&mut self) {
+                let _ = set_raw_mode(false, self.old);
+            }
+        }
         let _guard = RawGuard { old: &mut old };
 
         // Hide cursor
         print!("\x1b[?25l");
         let _ = std::io::stdout().flush();
         struct CursorGuard;
-        impl Drop for CursorGuard { fn drop(&mut self) { let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25h\n"); let _ = std::io::stdout().flush(); } }
+        impl Drop for CursorGuard {
+            fn drop(&mut self) {
+                let _ = std::io::Write::write_all(&mut std::io::stdout(), b"\x1b[?25h\n");
+                let _ = std::io::stdout().flush();
+            }
+        }
         let _cg = CursorGuard;
 
         let mut sel: isize = 0;
@@ -105,8 +150,11 @@ fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
         fn draw(items: &[DateItem], sel: isize) {
             println!("Select date (use ↑/↓, Enter):");
             for (i, d) in items.iter().enumerate() {
-                if i as isize == sel { print!("\x1b[7m> {} {}\x1b[27m\n", d.suffix, d.date); }
-                else { println!("  {} {}", d.suffix, d.date); }
+                if i as isize == sel {
+                    println!("\x1b[7m> {} {}\x1b[27m", d.suffix, d.date);
+                } else {
+                    println!("  {} {}", d.suffix, d.date);
+                }
             }
             let _ = std::io::stdout().flush();
         }
@@ -114,25 +162,44 @@ fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
         let mut stdin = std::io::stdin();
         let mut buf = [0u8; 3];
         loop {
-            if stdin.read(&mut buf).ok().unwrap_or(0) == 0 { return ArrowOutcome::Aborted; }
+            if stdin.read(&mut buf).ok().unwrap_or(0) == 0 {
+                return ArrowOutcome::Aborted;
+            }
             match buf {
-                [b'\r', ..] | [b'\n', ..] => { println!(""); return ArrowOutcome::Pick(sel as usize); }
-                [0x1b, b'[', b'A'] => { if sel > 0 { sel -= 1; } }
-                [0x1b, b'[', b'B'] => { if sel < (items.len() as isize - 1) { sel += 1; } }
-                [0x03, ..] => { // Ctrl-C in raw mode
+                [b'\r', ..] | [b'\n', ..] => {
+                    println!();
+                    return ArrowOutcome::Pick(sel as usize);
+                }
+                [0x1b, b'[', b'A'] => {
+                    if sel > 0 {
+                        sel -= 1;
+                    }
+                }
+                [0x1b, b'[', b'B'] => {
+                    if sel < (items.len() as isize - 1) {
+                        sel += 1;
+                    }
+                }
+                [0x03, ..] => {
+                    // Ctrl-C in raw mode
                     print_yellow("No selection made\n");
                     return ArrowOutcome::Aborted;
                 }
-                [b'q', ..] => { print_yellow("No selection made\n"); return ArrowOutcome::Aborted; }
+                [b'q', ..] => {
+                    print_yellow("No selection made\n");
+                    return ArrowOutcome::Aborted;
+                }
                 _ => {}
             }
             // Move cursor up to redraw (1 for prompt + N items)
             let up = items.len() + 1;
             print!("\x1b[{}A", up);
-            for _ in 0..up { print!("\x1b[2K\r\n"); }
+            for _ in 0..up {
+                print!("\x1b[2K\r\n");
+            }
             print!("\x1b[{}A", up);
             draw(items, sel);
-            buf = [0;3];
+            buf = [0; 3];
         }
     }
     #[allow(unreachable_code)]
@@ -140,4 +207,6 @@ fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
 }
 
 #[cfg(not(unix))]
-fn arrow_select(_items: &[DateItem]) -> ArrowOutcome { ArrowOutcome::Unsupported }
+fn arrow_select(_items: &[DateItem]) -> ArrowOutcome {
+    ArrowOutcome::Unsupported
+}

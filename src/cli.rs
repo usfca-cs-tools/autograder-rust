@@ -18,7 +18,10 @@ pub enum Commands {
         verbose: bool,
         #[arg(long = "very-verbose")]
         very_verbose: bool,
-        #[arg(long = "unified-diff", help = "When verbose, print full unified diffs on mismatch")]
+        #[arg(
+            long = "unified-diff",
+            help = "When verbose, print full unified diffs on mismatch"
+        )]
         unified_diff: bool,
         #[arg(long = "quiet", help = "Suppress per-test-case pass/fail lines")]
         quiet: bool,
@@ -32,15 +35,26 @@ pub enum Commands {
         verbose: bool,
         #[arg(long = "very-verbose")]
         very_verbose: bool,
-        #[arg(long = "unified-diff", help = "When verbose, print full unified diffs on mismatch")]
+        #[arg(
+            long = "unified-diff",
+            help = "When verbose, print full unified diffs on mismatch"
+        )]
         unified_diff: bool,
         #[arg(short = 'g', long = "github-action")]
         github_action: bool,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
-        #[arg(short = 'd', long = "by-date", help = "Select a date from dates.toml for suffix and checkout context")]
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Select a date from dates.toml for suffix and checkout context"
+        )]
         by_date: bool,
-        #[arg(short = 'j', long = "jobs", help = "Number of parallel jobs (default: CPUs)")]
+        #[arg(
+            short = 'j',
+            long = "jobs",
+            help = "Number of parallel jobs (default: CPUs)"
+        )]
         jobs: Option<usize>,
         #[arg(long = "quiet", help = "Suppress per-test-case pass/fail lines")]
         quiet: bool,
@@ -54,9 +68,17 @@ pub enum Commands {
         exec_cmd: String,
         #[arg(short = 's', long = "students")]
         students: Option<Vec<String>>,
-        #[arg(short = 'j', long = "jobs", help = "Number of parallel jobs (default: CPUs)")]
+        #[arg(
+            short = 'j',
+            long = "jobs",
+            help = "Number of parallel jobs (default: CPUs)"
+        )]
         jobs: Option<usize>,
-        #[arg(short = 'd', long = "by-date", help = "Select a date from dates.toml for suffix context")]
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Select a date from dates.toml for suffix context"
+        )]
         by_date: bool,
     },
     Clone {
@@ -66,9 +88,16 @@ pub enum Commands {
         students: Option<Vec<String>>,
         #[arg(short = 'v', long = "verbose")]
         verbose: bool,
-        #[arg(long = "date", help = "Checkout commit before this 'YYYY-MM-DD[ HH:MM:SS]' date")] 
+        #[arg(
+            long = "date",
+            help = "Checkout commit before this 'YYYY-MM-DD[ HH:MM:SS]' date"
+        )]
         date: Option<String>,
-        #[arg(short = 'd', long = "by-date", help = "Select a date from dates.toml for suffix and checkout context")] 
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Select a date from dates.toml for suffix and checkout context"
+        )]
         by_date: bool,
     },
     Pull {
@@ -80,25 +109,43 @@ pub enum Commands {
     Upload {
         #[arg(short = 'p', long = "project")]
         project: Option<String>,
-        #[arg(long = "file", help = "Path to class results JSON; defaults to <project>.json")]
+        #[arg(
+            long = "file",
+            help = "Path to class results JSON; defaults to <project>.json"
+        )]
         file: Option<String>,
         #[arg(short = 'v', long = "verbose")]
         verbose: bool,
-        #[arg(short = 'd', long = "by-date", help = "Select JSON from current dir (arrow keys)")]
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Select JSON from current dir (arrow keys)"
+        )]
         by_date: bool,
     },
     Rollup {
         #[arg(short = 'p', long = "project")]
         project: Option<String>,
-        #[arg(short = 'd', long = "by-date", help = "Use dates.toml to aggregate JSONs into a rollup")]
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Use dates.toml to aggregate JSONs into a rollup"
+        )]
         by_date: bool,
     },
     View {
         #[arg(short = 'p', long = "project")]
         project: Option<String>,
-        #[arg(long = "file", help = "Path to class results JSON; defaults to <project>.json")]
+        #[arg(
+            long = "file",
+            help = "Path to class results JSON; defaults to <project>.json"
+        )]
         file: Option<String>,
-        #[arg(short = 'd', long = "by-date", help = "Select JSON from current dir (arrow keys)")]
+        #[arg(
+            short = 'd',
+            long = "by-date",
+            help = "Select JSON from current dir (arrow keys)"
+        )]
         by_date: bool,
         #[arg(long = "no-color", help = "Disable ANSI color output")]
         no_color: bool,
@@ -106,5 +153,7 @@ pub enum Commands {
 }
 
 impl Cli {
-    pub fn parse() -> Self { <Cli as Parser>::parse() }
+    pub fn parse() -> Self {
+        <Cli as Parser>::parse()
+    }
 }

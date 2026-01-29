@@ -1,11 +1,10 @@
+pub mod canvas;
 pub mod cli;
-pub mod config;
-pub mod util;
 pub mod cmd;
-pub mod testcases;
+pub mod config;
+pub mod dates;
 pub mod git;
 pub mod github;
-pub mod canvas;
-pub mod dates;
 pub mod rollup;
-
+pub mod testcases;
+pub mod util;
