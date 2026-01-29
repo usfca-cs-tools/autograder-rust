@@ -25,15 +25,8 @@ fn exec_timeout() {
 
 #[test]
 fn exec_output_limit() {
-    let tmp = tempfile::tempdir().unwrap();
-    let script = tmp.path().join("spam.sh");
-    // Print 1000 lines of 100 chars => 100k; we'll set limit lower to trigger
-    fs::write(&script, "#!/bin/sh\ni=0\nwhile [ $i -lt 2000 ]; do\n  echo 012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789\n  i=$((i+1))\ndone\n").unwrap();
-    let mut perm = fs::metadata(&script).unwrap().permissions();
-    perm.set_mode(0o755);
-    fs::set_permissions(&script, perm).unwrap();
-
-    let args = vec![script.to_string_lossy().to_string()];
+    // Use `yes` to produce infinite output - guaranteed to hit the limit
+    let args = vec!["yes".to_string()];
     let opts = ExecOptions {
         cwd: None,
         timeout: std::time::Duration::from_secs(5),
