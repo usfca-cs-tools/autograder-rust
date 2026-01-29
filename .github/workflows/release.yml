@@ -61,7 +61,7 @@ jobs:
           path: grade-rs-riscv64gc-unknown-linux-gnu.tar.gz
 
   build-macos-x86_64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
 

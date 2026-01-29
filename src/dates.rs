@@ -82,9 +82,9 @@ fn set_raw_mode(enable: bool, old: &mut libc::termios) -> std::io::Result<()> {
 
 enum ArrowOutcome { Pick(usize), Aborted, Unsupported }
 
+#[cfg(unix)]
 fn arrow_select(items: &[DateItem]) -> ArrowOutcome {
     if !is_tty() { return ArrowOutcome::Unsupported; }
-    #[cfg(unix)]
     unsafe {
         use std::io::{Read, Write};
         let mut old = std::mem::zeroed();
