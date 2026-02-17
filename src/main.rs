@@ -38,7 +38,9 @@ fn main() {
             no_color,
         } => {
             util::set_color_enabled(!*no_color && std::env::var("NO_COLOR").is_err());
-            if *verbose {
+            let eff_verbose = *verbose >= 1 || *very_verbose;
+            let eff_very_verbose = *verbose >= 2 || *very_verbose;
+            if eff_verbose {
                 if let Some(dir) = cfg_path.parent() {
                     println!("Config directory: {}", dir.display());
                 }
@@ -46,8 +48,8 @@ fn main() {
             let project_name = project.clone().unwrap_or_else(util::project_from_cwd);
             let mut runner = TestRunner::new(
                 &config.test,
-                *verbose,
-                *very_verbose,
+                eff_verbose,
+                eff_very_verbose,
                 *unified_diff,
                 project_name.clone(),
             );
@@ -74,13 +76,11 @@ fn main() {
             no_color,
         } => {
             util::set_color_enabled(!*no_color && std::env::var("NO_COLOR").is_err());
-            let list: Vec<String> = if let Some(list) = students {
-                list.clone()
-            } else {
-                config.config.students.clone()
-            };
+            let eff_verbose = *verbose >= 1 || *very_verbose;
+            let eff_very_verbose = *verbose >= 2 || *very_verbose;
+            let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided and Config.students is empty\n");
+                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
                 std::process::exit(2);
             }
 
@@ -92,7 +92,7 @@ fn main() {
                     config.github.clone(),
                     config.git.org.clone(),
                     project_name.clone(),
-                    *verbose,
+                    eff_verbose,
                 ) {
                     Ok(g) => g,
                     Err(e) => {
@@ -121,8 +121,8 @@ fn main() {
                 // Persist results
                 let runner = TestRunner::new(
                     &config.test,
-                    *verbose,
-                    *very_verbose,
+                    eff_verbose,
+                    eff_very_verbose,
                     *unified_diff,
                     project_name.clone(),
                 );
@@ -134,8 +134,8 @@ fn main() {
                 // Local test runner path
                 let mut runner = TestRunner::new(
                     &config.test,
-                    *verbose,
-                    *very_verbose,
+                    eff_verbose,
+                    eff_very_verbose,
                     *unified_diff,
                     project_name.clone(),
                 );
@@ -176,7 +176,7 @@ fn main() {
                     .unwrap_or(0)
                     + 1;
                 // Avoid interleaved stdout noise when verbose; run single-threaded then
-                let threads = if *verbose || *very_verbose {
+                let threads = if eff_verbose || eff_very_verbose {
                     1
                 } else {
                     jobs.unwrap_or_else(num_cpus)
@@ -187,8 +187,8 @@ fn main() {
                     for r in &repos {
                         let mut runner_local = TestRunner::new(
                             &config.test,
-                            *verbose,
-                            *very_verbose,
+                            eff_verbose,
+                            eff_very_verbose,
                             *unified_diff,
                             project_name.clone(),
                         );
@@ -235,7 +235,7 @@ fn main() {
                             let r = r.clone();
                             let tx = tx.clone();
                             // Clone minimal runner state per thread by creating a new runner
-                            let mut runner_local = TestRunner::new(&config.test, *verbose, *very_verbose, *unified_diff, project_name.clone());
+                            let mut runner_local = TestRunner::new(&config.test, eff_verbose, eff_very_verbose, *unified_diff, project_name.clone());
                             runner_local.set_quiet(true);
                             s.spawn(move |_| {
                                 let res = runner_local.test_repo(&r, None).map(|rr| (r, rr));
@@ -319,13 +319,9 @@ fn main() {
             by_date,
         } => {
             // Build repo list from students (like pull), honoring project subdir
-            let list: Vec<String> = if let Some(list) = students {
-                list.clone()
-            } else {
-                config.config.students.clone()
-            };
+            let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided and Config.students is empty\n");
+                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
                 std::process::exit(2);
             }
             let project_name = project.clone().unwrap_or_else(util::project_from_cwd);
@@ -449,13 +445,9 @@ fn main() {
             date,
             by_date,
         } => {
-            let list: Vec<String> = if let Some(list) = students {
-                list.clone()
-            } else {
-                config.config.students.clone()
-            };
+            let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided and Config.students is empty\n");
+                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
@@ -501,13 +493,9 @@ fn main() {
             }
         }
         Commands::Pull { project, students } => {
-            let list: Vec<String> = if let Some(list) = students {
-                list.clone()
-            } else {
-                config.config.students.clone()
-            };
+            let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided and Config.students is empty\n");
+                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
@@ -676,6 +664,34 @@ fn main() {
     }
 
     print_green("\nDone\n");
+}
+
+fn make_student_list(
+    cli_students: &Option<Vec<String>>,
+    config: &Config,
+) -> Vec<String> {
+    if let Some(list) = cli_students {
+        if !list.is_empty() {
+            return list.clone();
+        }
+    }
+    if !config.config.students.is_empty() {
+        return config.config.students.clone();
+    }
+    if !config.canvas_mapper.map_path.is_empty() {
+        match canvas::CanvasMapper::from_cfg(&config.canvas_mapper) {
+            Ok(mapper) => {
+                let gh = mapper.github_list();
+                if !gh.is_empty() {
+                    return gh;
+                }
+            }
+            Err(e) => {
+                print_red(&format!("Warning: could not read map file: {}\n", e));
+            }
+        }
+    }
+    Vec::new()
 }
 
 fn num_cpus() -> usize {

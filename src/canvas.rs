@@ -42,6 +42,10 @@ impl CanvasMapper {
     pub fn lookup(&self, github: &str) -> Option<String> {
         self.map.get(github).cloned()
     }
+
+    pub fn github_list(&self) -> Vec<String> {
+        self.map.keys().cloned().collect()
+    }
 }
 
 pub struct CanvasClient {

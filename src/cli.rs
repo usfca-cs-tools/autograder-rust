@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "grade-rs", version, about = "Rust autograder (MVP)")]
@@ -14,8 +14,8 @@ pub enum Commands {
         project: Option<String>,
         #[arg(short = 'n', long = "test-name")]
         test_name: Option<String>,
-        #[arg(short = 'v', long = "verbose")]
-        verbose: bool,
+        #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
+        verbose: u8,
         #[arg(long = "very-verbose")]
         very_verbose: bool,
         #[arg(
@@ -31,8 +31,8 @@ pub enum Commands {
     Class {
         #[arg(short = 'p', long = "project")]
         project: Option<String>,
-        #[arg(short = 'v', long = "verbose")]
-        verbose: bool,
+        #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
+        verbose: u8,
         #[arg(long = "very-verbose")]
         very_verbose: bool,
         #[arg(
