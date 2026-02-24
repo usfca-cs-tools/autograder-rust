@@ -316,7 +316,7 @@ fn next_link_from_header(link: Option<&reqwest::header::HeaderValue>) -> Option<
 #[derive(Debug, Deserialize)]
 struct ClassResultItem {
     student: Option<String>,
-    score: i64,
+    score: f64,
     comment: String,
 }
 
@@ -403,7 +403,7 @@ pub fn upload_class(
         print!("Uploading {} {} ", login_id, it.score);
         // Skip if same as Canvas
         if let Ok(Some(cur)) = client.get_submission_score(course_id, assignment_id, user_id) {
-            if (cur - (it.score as f64)).abs() < f64::EPSILON {
+            if (cur - it.score).abs() < f64::EPSILON {
                 println!("skipping: new score == score in Canvas");
                 continue;
             }
@@ -411,7 +411,7 @@ pub fn upload_class(
                 println!("(current Canvas score: {})", cur);
             }
         }
-        match client.put_submission(course_id, assignment_id, user_id, it.score, &it.comment) {
+        match client.put_submission(course_id, assignment_id, user_id, it.score as i64, &it.comment) {
             Ok(true) => print_green("ok\n"),
             _ => print_red("failed\n"),
         }
