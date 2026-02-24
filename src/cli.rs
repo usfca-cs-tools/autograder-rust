@@ -114,8 +114,8 @@ pub enum Commands {
             help = "Path to class results JSON; defaults to <project>.json"
         )]
         file: Option<String>,
-        #[arg(short = 'v', long = "verbose")]
-        verbose: bool,
+        #[arg(short = 'v', long = "verbose", action = ArgAction::Count)]
+        verbose: u8,
         #[arg(
             short = 'd',
             long = "by-date",

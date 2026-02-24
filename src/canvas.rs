@@ -51,18 +51,18 @@ impl CanvasMapper {
 pub struct CanvasClient {
     cfg: CanvasCfg,
     client: reqwest::blocking::Client,
-    _verbose: bool,
+    verbose: u8,
 }
 
 impl CanvasClient {
-    pub fn new(cfg: CanvasCfg, verbose: bool) -> anyhow::Result<Self> {
+    pub fn new(cfg: CanvasCfg, verbose: u8) -> anyhow::Result<Self> {
         let client = reqwest::blocking::Client::builder()
             .user_agent("autograder-rust/0.1")
             .build()?;
         Ok(CanvasClient {
             cfg,
             client,
-            _verbose: verbose,
+            verbose,
         })
     }
 
@@ -91,25 +91,73 @@ impl CanvasClient {
 
     pub fn get_course_id(&self) -> anyhow::Result<i64> {
         let mut url = self.url("api/v1/courses?per_page=100");
+        let debug = self.verbose >= 2;
+        if debug {
+            println!("[debug] Searching for course: {:?}", self.cfg.course_name);
+        }
+        let mut page = 0usize;
+        let mut total_courses = 0usize;
         loop {
+            page += 1;
             let res = self.client.get(&url).headers(self.auth_headers()).send()?;
-            if !res.status().is_success() {
-                anyhow::bail!("courses GET failed: {}", res.status());
+            let status = res.status();
+            if !status.is_success() {
+                anyhow::bail!("courses GET failed: {}", status);
             }
             let link_header = res.headers().get("Link").cloned();
             let courses: serde_json::Value = res.json()?;
+            let page_courses = courses.as_array().map(|a| a.len()).unwrap_or(0);
+            total_courses += page_courses;
+            if debug {
+                println!(
+                    "[debug] GET /api/v1/courses?per_page=100 -> {} ({} courses on page {})",
+                    status, page_courses, page
+                );
+                match &link_header {
+                    Some(h) => println!(
+                        "[debug]   Link header: {}",
+                        h.to_str().unwrap_or("<non-utf8>")
+                    ),
+                    None => println!("[debug]   Link header: (none - last page)"),
+                }
+                let empty = vec![];
+                let names: Vec<&str> = courses
+                    .as_array()
+                    .unwrap_or(&empty)
+                    .iter()
+                    .filter_map(|c| c.get("name").and_then(|v| v.as_str()))
+                    .collect();
+                println!("[debug]   Courses on page {}: {:?}", page, names);
+            }
             for c in courses.as_array().unwrap_or(&vec![]) {
                 if c.get("name").and_then(|v| v.as_str()) == Some(self.cfg.course_name.as_str()) {
                     if let Some(id) = c.get("id").and_then(|v| v.as_i64()) {
+                        if debug {
+                            println!(
+                                "[debug] Total courses seen: {} across {} page(s)",
+                                total_courses, page
+                            );
+                        }
                         return Ok(id);
                     }
                 }
             }
             if let Some(next) = next_link_from_header(link_header.as_ref()) {
-                url = format!("{}{}", self.base(), next);
+                // Canvas returns absolute URLs in Link headers; mocks use relative paths
+                url = if next.starts_with("http://") || next.starts_with("https://") {
+                    next
+                } else {
+                    format!("{}{}", self.base(), next)
+                };
             } else {
                 break;
             }
+        }
+        if debug {
+            println!(
+                "[debug] Total courses seen: {} across {} page(s)",
+                total_courses, page
+            );
         }
         anyhow::bail!("course not found: {}", self.cfg.course_name)
     }
@@ -119,25 +167,58 @@ impl CanvasClient {
             "api/v1/courses/{}/assignments?per_page=50",
             course_id
         ));
+        let debug = self.verbose >= 2;
+        if debug {
+            println!("[debug] Searching for assignment: {:?}", assignment_name);
+        }
+        let mut page = 0usize;
+        let mut total = 0usize;
         loop {
+            page += 1;
             let res = self.client.get(&url).headers(self.auth_headers()).send()?;
-            if !res.status().is_success() {
-                anyhow::bail!("assignments GET failed: {}", res.status());
+            let status = res.status();
+            if !status.is_success() {
+                anyhow::bail!("assignments GET failed: {}", status);
             }
             let link_header = res.headers().get("Link").cloned();
             let assigns: serde_json::Value = res.json()?;
+            let page_count = assigns.as_array().map(|a| a.len()).unwrap_or(0);
+            total += page_count;
+            if debug {
+                println!(
+                    "[debug] GET /api/v1/courses/{}/assignments?per_page=50 -> {} ({} assignments on page {})",
+                    course_id, status, page_count, page
+                );
+            }
             for a in assigns.as_array().unwrap_or(&vec![]) {
                 if a.get("name").and_then(|v| v.as_str()) == Some(assignment_name) {
                     if let Some(id) = a.get("id").and_then(|v| v.as_i64()) {
+                        if debug {
+                            println!(
+                                "[debug] Total assignments seen: {} across {} page(s)",
+                                total, page
+                            );
+                        }
                         return Ok(id);
                     }
                 }
             }
             if let Some(next) = next_link_from_header(link_header.as_ref()) {
-                url = format!("{}{}", self.base(), next);
+                // Canvas returns absolute URLs in Link headers; mocks use relative paths
+                url = if next.starts_with("http://") || next.starts_with("https://") {
+                    next
+                } else {
+                    format!("{}{}", self.base(), next)
+                };
             } else {
                 break;
             }
+        }
+        if debug {
+            println!(
+                "[debug] Total assignments seen: {} across {} page(s)",
+                total, page
+            );
         }
         anyhow::bail!("assignment not found: {}", assignment_name)
     }
@@ -148,10 +229,19 @@ impl CanvasClient {
             course_id
         ));
         let res = self.client.get(url).headers(self.auth_headers()).send()?;
-        if !res.status().is_success() {
-            anyhow::bail!("enrollments GET failed: {}", res.status());
+        let status = res.status();
+        if !status.is_success() {
+            anyhow::bail!("enrollments GET failed: {}", status);
         }
         let list: Vec<Enrollment> = res.json()?;
+        if self.verbose >= 2 {
+            println!(
+                "[debug] GET /api/v1/courses/{}/enrollments?per_page=50 -> {} ({} enrollments)",
+                course_id,
+                status,
+                list.len()
+            );
+        }
         Ok(list)
     }
 
@@ -213,7 +303,8 @@ fn next_link_from_header(link: Option<&reqwest::header::HeaderValue>) -> Option<
     let val = link?.to_str().ok()?;
     for part in val.split(',') {
         let part = part.trim();
-        if part.contains("rel=next") {
+        // Match both rel=next (unquoted, used by mocks) and rel="next" (quoted, used by Canvas)
+        if part.contains("rel=\"next\"") || part.contains("rel=next") {
             let start = part.find('<')? + 1;
             let end = part.find('>')?;
             return Some(part[start..end].to_string());
@@ -234,7 +325,7 @@ pub fn upload_class(
     mapper_cfg: CanvasMapperCfg,
     project: &str,
     file: Option<&str>,
-    verbose: bool,
+    verbose: u8,
     by_date: bool,
 ) -> anyhow::Result<()> {
     let json_path = if by_date && file.is_none() {
@@ -277,7 +368,7 @@ pub fn upload_class(
         )
     })?;
     let items: Vec<ClassResultItem> = serde_json::from_str(&data)?;
-    if verbose {
+    if verbose >= 1 {
         println!("Uploading from {} ({} results)", json_path, items.len());
     }
 
@@ -285,7 +376,7 @@ pub fn upload_class(
     let client = CanvasClient::new(canvas, verbose)?;
     let course_id = client.get_course_id()?;
     let assignment_id = client.get_assignment_id(course_id, project)?;
-    if verbose {
+    if verbose >= 1 {
         println!("Course ID: {}, Assignment ID: {}", course_id, assignment_id);
     }
     let enrollment = client.get_enrollment(course_id)?;
@@ -306,7 +397,7 @@ pub fn upload_class(
             print_red(&format!("{} not enrolled\n", login_id));
             continue;
         };
-        if verbose {
+        if verbose >= 1 {
             println!("Map: {} -> {} (user_id {})", student, login_id, user_id);
         }
         print!("Uploading {} {} ", login_id, it.score);
@@ -316,7 +407,7 @@ pub fn upload_class(
                 println!("skipping: new score == score in Canvas");
                 continue;
             }
-            if verbose {
+            if verbose >= 1 {
                 println!("(current Canvas score: {})", cur);
             }
         }

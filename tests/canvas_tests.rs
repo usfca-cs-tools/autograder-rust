@@ -84,7 +84,7 @@ fn canvas_upload_mock() {
         mapper,
         project,
         Some(json_path.to_str().unwrap()),
-        false,
+        0,
         false,
     )
     .unwrap();
@@ -142,7 +142,7 @@ fn canvas_pagination_and_error() {
     // Call get_course_id through upload_class minimal path: expect failure due to missing CSV
     // but ensure pagination was hit
     // We'll directly construct client and call get_course_id instead for precision
-    let client = autograder_rust::canvas::CanvasClient::new(canvas, false).unwrap();
+    let client = autograder_rust::canvas::CanvasClient::new(canvas, 0).unwrap();
     let course_id = client.get_course_id().unwrap();
     assert_eq!(course_id, 42);
     courses_p1.assert();
