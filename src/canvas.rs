@@ -411,7 +411,13 @@ pub fn upload_class(
                 println!("(current Canvas score: {})", cur);
             }
         }
-        match client.put_submission(course_id, assignment_id, user_id, it.score as i64, &it.comment) {
+        match client.put_submission(
+            course_id,
+            assignment_id,
+            user_id,
+            it.score as i64,
+            &it.comment,
+        ) {
             Ok(true) => print_green("ok\n"),
             _ => print_red("failed\n"),
         }
