@@ -80,7 +80,9 @@ fn main() {
             let eff_very_verbose = *verbose >= 2 || *very_verbose;
             let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
+                print_red(
+                    "No students provided (not in CLI, Config.students, or CanvasMapper map)\n",
+                );
                 std::process::exit(2);
             }
 
@@ -321,7 +323,9 @@ fn main() {
             // Build repo list from students (like pull), honoring project subdir
             let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
+                print_red(
+                    "No students provided (not in CLI, Config.students, or CanvasMapper map)\n",
+                );
                 std::process::exit(2);
             }
             let project_name = project.clone().unwrap_or_else(util::project_from_cwd);
@@ -447,7 +451,9 @@ fn main() {
         } => {
             let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
+                print_red(
+                    "No students provided (not in CLI, Config.students, or CanvasMapper map)\n",
+                );
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
@@ -495,7 +501,9 @@ fn main() {
         Commands::Pull { project, students } => {
             let list = make_student_list(students, &config);
             if list.is_empty() {
-                print_red("No students provided (not in CLI, Config.students, or CanvasMapper map)\n");
+                print_red(
+                    "No students provided (not in CLI, Config.students, or CanvasMapper map)\n",
+                );
                 std::process::exit(2);
             }
             let g = git::Git::new(config.git.clone());
@@ -666,10 +674,7 @@ fn main() {
     print_green("\nDone\n");
 }
 
-fn make_student_list(
-    cli_students: &Option<Vec<String>>,
-    config: &Config,
-) -> Vec<String> {
+fn make_student_list(cli_students: &Option<Vec<String>>, config: &Config) -> Vec<String> {
     if let Some(list) = cli_students {
         if !list.is_empty() {
             return list.clone();
