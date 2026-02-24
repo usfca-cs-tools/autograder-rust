@@ -189,12 +189,12 @@ impl TestRunner {
     }
 
     fn interpolate(&self, s: &str, tc_name: &str) -> String {
-        let mut out = s.replace("$project", &self.project);
         let proj_tests = Path::new(&self.tests_path)
             .join(&self.project)
             .to_string_lossy()
             .to_string();
-        out = out.replace("$project_tests", &proj_tests);
+        let mut out = s.replace("$project_tests", &proj_tests);
+        out = out.replace("$project", &self.project);
         out = out.replace("$digital", &self.digital_path);
         out = out.replace("$name", tc_name);
         out
