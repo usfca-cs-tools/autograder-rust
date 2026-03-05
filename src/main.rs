@@ -27,7 +27,15 @@ fn main() {
         }
     };
 
-    match &cli.command {
+    let command = match &cli.command {
+        Some(cmd) => cmd,
+        None => {
+            println!("Config path: {}", cfg_path.display());
+            return;
+        }
+    };
+
+    match command {
         Commands::Test {
             project,
             test_name,

@@ -4,7 +4,7 @@ use clap::{ArgAction, Parser, Subcommand};
 #[command(name = "grade-rs", version, about = "Rust autograder (MVP)")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
