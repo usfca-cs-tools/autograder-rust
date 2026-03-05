@@ -219,7 +219,7 @@ impl TestRunner {
                 ];
                 let opts = ExecOptions {
                     cwd: None,
-                    timeout: Duration::from_secs(30),
+                    timeout: Duration::from_secs(self.project_cfg.timeout),
                     capture_stderr: true,
                     output_limit: 220_000,
                 };
