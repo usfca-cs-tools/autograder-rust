@@ -64,6 +64,10 @@ fn main() {
             if *quiet {
                 runner.set_quiet(true);
             }
+            if let Err(e) = runner.load_testcases() {
+                print_red(&format!("{}\n", e));
+                std::process::exit(1);
+            }
             let repo = Repo::local(".".into(), runner.project_subdir());
             let res = runner.test_repo(&repo, test_name.as_deref());
             if let Err(e) = res {

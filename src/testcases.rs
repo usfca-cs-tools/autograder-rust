@@ -170,7 +170,10 @@ impl TestRunner {
         self.project_cfg.subdir.clone()
     }
 
-    fn load_testcases(&mut self) -> anyhow::Result<()> {
+    pub fn load_testcases(&mut self) -> anyhow::Result<()> {
+        if !self.testcases.is_empty() {
+            return Ok(());
+        }
         let path = Path::new(&self.tests_path)
             .join(&self.project)
             .join(format!("{}.toml", &self.project));
