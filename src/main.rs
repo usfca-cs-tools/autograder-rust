@@ -155,6 +155,10 @@ fn main() {
                 );
                 // Suppress internal per-test and trailing prints; we'll print summaries ourselves
                 runner.set_quiet(true);
+                if let Err(e) = runner.load_testcases() {
+                    print_red(&format!("{}\n", e));
+                    std::process::exit(1);
+                }
                 let (suffix_opt, _date_opt) = if *by_date {
                     let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
                         Ok(d) => d,
@@ -341,7 +345,11 @@ fn main() {
                 std::process::exit(2);
             }
             let project_name = project.clone().unwrap_or_else(util::project_from_cwd);
-            let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            let mut runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            if let Err(e) = runner.load_testcases() {
+                print_red(&format!("{}\n", e));
+                std::process::exit(1);
+            }
             let suffix_opt: Option<String> = if *by_date {
                 let d = match dates::Dates::from_tests_path(&runner.tests_path, &project_name) {
                     Ok(d) => d,
@@ -613,7 +621,11 @@ fn main() {
                     suffix_opt = Some(stem[prefix.len()..].to_string());
                 }
             }
-            let runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            let mut runner = TestRunner::new(&config.test, false, false, false, project_name.clone());
+            if let Err(e) = runner.load_testcases() {
+                print_red(&format!("{}\n", e));
+                return;
+            }
             let subdir = runner.project_subdir();
             let mut labels: Vec<String> = vec![];
             for rr in &results {
