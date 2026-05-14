@@ -47,7 +47,6 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
     let mut out: Vec<RolledItem> = vec![];
     for (student, map) in by_student.iter() {
         let mut rolled_score: f64 = 0.0;
-        let mut prev_score: i64 = 0;
         let mut rolled_comment = String::new();
         for d in dates {
             if let Some(r) = map.get(&d.suffix) {
@@ -56,7 +55,10 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
                     "{}: {} + ({} - {}) * {} = ",
                     d.suffix, rolled_score, score, rolled_score, d.percentage
                 );
-                if score != prev_score {
+                // Improvements only: never let a later milestone reduce the
+                // rolled score (guards against flaky tests and intentional
+                // regressions on late commits).
+                if (score as f64) > rolled_score {
                     rolled_score += (score as f64 - rolled_score) * d.percentage;
                 }
                 let final_line = format!("{}\n", rolled_score);
@@ -66,7 +68,6 @@ pub fn rollup(project: &str, dates: &[DateItem]) -> anyhow::Result<()> {
                 rolled_comment.push_str(&comment_line);
                 rolled_comment.push_str(&final_line);
                 rolled_comment.push('\n');
-                prev_score = score;
             }
         }
         out.push(RolledItem {
